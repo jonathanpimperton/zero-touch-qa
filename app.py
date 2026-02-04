@@ -232,6 +232,10 @@ HOME_PAGE = """<!DOCTYPE html>
             background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px;
             font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
         }
+        .nav-links { display: flex; gap: 12px; }
+        .nav-links a { color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;
+            text-decoration: none; padding: 6px 14px; border-radius: 8px; }
+        .nav-links a:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
         .container { max-width: 720px; margin: 36px auto; padding: 0 24px; }
 
@@ -298,9 +302,10 @@ HOME_PAGE = """<!DOCTYPE html>
                     <p>Automated website quality assurance</p>
                 </div>
             </div>
-            <div style="display:flex;gap:12px;">
-                <a href="/rules" style="color:rgba(255,255,255,0.8);font-size:13px;font-weight:600;text-decoration:none;padding:6px 14px;border-radius:8px;">Rules</a>
-                <a href="/history" style="color:rgba(255,255,255,0.8);font-size:13px;font-weight:600;text-decoration:none;padding:6px 14px;border-radius:8px;">History</a>
+            <div class="nav-links">
+                <a href="/rules">View Rules</a>
+                <a href="/rules/edit">Edit Rules</a>
+                <a href="/history">History</a>
             </div>
         </div>
     </div>
