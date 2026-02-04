@@ -301,7 +301,8 @@ def main():
             </div>
         </div>
         <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 12px 16px; border-radius: 4px;">
-            <p style="font-size: 13px; font-weight: 500;">These are real scans against the provided test sites, not mock data.</p>
+            <p style="font-size: 13px; font-weight: 500;">These are real scans against the provided test sites, not mock data.
+            <br/>Try it live: <a href="https://zero-touch-qa.onrender.com" target="_blank" style="color: #5820BA; font-weight: 600;">zero-touch-qa.onrender.com</a></p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">9</div>
@@ -543,7 +544,7 @@ def main():
         <h1 style="font-size: 36px; color: #fff; margin-bottom: 16px;">Zero-Touch QA</h1>
         <p style="font-size: 18px; color: #DDEE91; font-weight: 600; margin-bottom: 20px;">Scan smarter. Ship faster.</p>
         <p style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">Ready for pilot</p>
-        <p style="font-size: 13px; color: rgba(255,255,255,0.5);">Live demo: <span id="live-url" style="color: #DDEE91;">zero-touch-qa.onrender.com</span></p>
+        <p style="font-size: 13px; color: rgba(255,255,255,0.5);">Live demo: <a href="https://zero-touch-qa.onrender.com" target="_blank" id="live-url" style="color: #DDEE91; text-decoration: underline;">zero-touch-qa.onrender.com</a></p>
         <div class="slide-num">17</div>
     </div>
     ''')

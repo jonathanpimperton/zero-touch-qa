@@ -421,7 +421,7 @@ def _load_scan_history():
     if scan_history:
         return
     json_files = sorted(
-        [f for f in os.listdir(REPORTS_DIR) if f.endswith(".json")],
+        [f for f in os.listdir(REPORTS_DIR) if f.endswith(".json") and f != "scan_counter.json"],
         key=lambda x: os.path.getmtime(os.path.join(REPORTS_DIR, x)),
     )
     for jf in json_files:
