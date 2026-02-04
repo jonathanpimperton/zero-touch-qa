@@ -1,0 +1,29 @@
+# Credentials - never commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Reports contain site-specific data
+reports/
+
+# Temp / generated cache files
+_logo_b64.txt
+_logo_uri.txt
+_tpl_img_*
+nul
+
+# IDE
+.claude/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+~$*
+
+# Hackathon source files (not needed in deployment)
+*.xlsx
+*.pdf
+*.pptx

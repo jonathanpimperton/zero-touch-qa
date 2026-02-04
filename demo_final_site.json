@@ -1,0 +1,372 @@
+{
+  "metadata": {
+    "tool": "Zero-Touch QA Scanner",
+    "version": "1.0.0",
+    "scan_id": "QA-0002",
+    "scan_time": "2026-02-04T13:58:35.707051",
+    "site_url": "https://essentialsfina.wpenginepowered.com",
+    "partner": "independent",
+    "phase": "final",
+    "pages_scanned": 21
+  },
+  "summary": {
+    "score": 94,
+    "total_checks": 35,
+    "passed": 25,
+    "failed": 2,
+    "warnings": 3,
+    "human_review": 5
+  },
+  "results": [
+    {
+      "rule_id": "FUNC-001",
+      "category": "functionality",
+      "check": "All links go to intended pages (no broken links)",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "All 31 links valid",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-001-W",
+      "category": "functionality",
+      "check": "Some links returned 403 (may block automated checks but work in browsers)",
+      "status": "WARN",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "1 link(s) returned 403 Forbidden (verify manually in browser):\nhttps://www.avma.org/resources-tools/pet-owners/petcare \u2014 found on: https://essentialsfina.wpenginepowered.com/resources/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-002",
+      "category": "functionality",
+      "check": "Phone numbers are correctly hyperlinked (tel: links)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "All visible phone numbers appear to be hyperlinked",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-003",
+      "category": "functionality",
+      "check": "Email addresses are correctly hyperlinked (mailto: links)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-004",
+      "category": "functionality",
+      "check": "Thank you / success pages exist for forms",
+      "status": "WARN",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "Forms found but no thank-you/success pages detected in crawl",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-005",
+      "category": "functionality",
+      "check": "Site responsive on mobile (no horizontal scroll)",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "PageSpeed Insights confirms mobile-friendly (viewport, tap targets, font sizes OK)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-006",
+      "category": "functionality",
+      "check": "Google Lighthouse performance score acceptable",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "PageSpeed Insights: Accessibility: 80/100 | CLS: 0",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-001",
+      "category": "craftsmanship",
+      "check": "Logo is linked to the homepage",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Logo links to homepage",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-002",
+      "category": "craftsmanship",
+      "check": "Favicon is present",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Favicon found",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-003",
+      "category": "craftsmanship",
+      "check": "Site passes contrast check for accessibility",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "PageSpeed Insights confirms sufficient color contrast",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-001",
+      "category": "content",
+      "check": "Privacy Policy is linked in the footer",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Privacy Policy link found in footer on https://essentialsfina.wpenginepowered.com",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-002",
+      "category": "content",
+      "check": "Accessibility Statement is linked in the footer",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Accessibility Statement link found in footer on https://essentialsfina.wpenginepowered.com",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-003",
+      "category": "content",
+      "check": "Footer shows \"Powered by PetDesk\" (no Whiskercloud mention)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Footer correctly shows 'Powered by PetDesk'",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-004",
+      "category": "content",
+      "check": "Only one H1 tag per page",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "All 21 pages have exactly one H1",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-005",
+      "category": "content",
+      "check": "All images have alt text",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "6 unique image(s) missing alt text:\ncloseup-of-orange-cat-foot-on-knit-blanket-1400x12 \u2014 found on: https://essentialsfina.wpenginepowered.com/about-us/\nhappy-family-petting-fluffy-white-dog-during-a-bre \u2014 found on: https://essentialsfina.wpenginepowered.com/about-us/\nshort-haired-woman-holding-black-and-white-cat-in- \u2014 found on: https://essentialsfina.wpenginepowered.com/resources/\nexcited-mixed-breed-terrier-dog-resting-on-yellow- \u2014 found on: https://essentialsfina.wpenginepowered.com/resources/\nsiamese-cat-in-a-green-field-of-dandelions-1400x12 \u2014 found on: https://essentialsfina.wpenginepowered.com/pet-wellness-preventative-care-canton-oh/\ntabby-cat-standing-in-a-wooden-box-outdoors-1920x1 \u2014 found on: https://essentialsfina.wpenginepowered.com/pet-wellness-preventative-care-canton-oh/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-006",
+      "category": "content",
+      "check": "Meta titles exist on all pages",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "All pages have meta titles",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-007",
+      "category": "content",
+      "check": "Meta descriptions exist on all pages",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "All pages have meta descriptions",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-008",
+      "category": "content",
+      "check": "No sample/dummy/placeholder text remaining (Lorem Ipsum, etc.)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "No placeholder text detected",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-009",
+      "category": "content",
+      "check": "Featured images are set on pages",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "All pages have OG images set",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-010",
+      "category": "content",
+      "check": "Accessibility widget (UserWay) is present",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "UserWay widget detected",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-001",
+      "category": "footer",
+      "check": "Social links are in footer only (not in nav bar or top bar)",
+      "status": "FAIL",
+      "weight": 5,
+      "points_lost": 5,
+      "details": "Social links found outside footer: facebook.com found in header/nav on https://essentialsfina.wpenginepowered.com; facebook.com found in header/nav on https://essentialsfina.wpenginepowered.com/; facebook.com found in header/nav on https://essentialsfina.wpenginepowered.com/about-us/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-002",
+      "category": "footer",
+      "check": "Google map iframe uses location address (not GMB listing with reviews)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Map iframes appear to use location (not GMB listing)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-003",
+      "category": "footer",
+      "check": "No Whiskercloud mentions anywhere on the site",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "No Whiskercloud mentions found",
+      "page_url": ""
+    },
+    {
+      "rule_id": "GRAM-001",
+      "category": "grammar_spelling",
+      "check": "Spelling errors in visible page content",
+      "status": "PASS",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "No spelling errors found across 5 page(s)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "GRAM-001-G",
+      "category": "grammar_spelling",
+      "check": "Grammar issues in visible page content",
+      "status": "WARN",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "3 unique grammar issue(s) (8 total) across 5 page(s):\nUse a comma before \u2018so\u2019 if it connects two independent clauses (unless they are closely connected and short). -> , so \u2014 2 occurrence(s) on: essentialsfina.wpenginepowered.com, essentialsfina.wpenginepowered.com/\nThree successive sentences begin with the same word. Consider rewording the sentence or use a thesaurus to find a synonym. -> Furthermore, he, Likewise, he \u2014 3 occurrence(s) on: essentialsfina.wpenginepowered.com, essentialsfina.wpenginepowered.com/\nIf specifying a range, consider using an en dash instead of a hyphen. -> 1\u20132 \u2014 3 occurrence(s) on: essentialsfina.wpenginepowered.com, essentialsfina.wpenginepowered.com/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "NAV-001",
+      "category": "navigation",
+      "check": "Inner pages are linked in navigation correctly",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Navigation links resolve correctly",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IMG-001",
+      "category": "functionality",
+      "check": "All images load correctly (no broken image files)",
+      "status": "PASS",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "All 44 images load correctly",
+      "page_url": ""
+    },
+    {
+      "rule_id": "SEO-001",
+      "category": "content",
+      "check": "Open Graph meta tags present for social sharing (og:title, og:description, og:image)",
+      "status": "PASS",
+      "weight": 2,
+      "points_lost": 0,
+      "details": "All 21 pages have Open Graph meta tags",
+      "page_url": ""
+    },
+    {
+      "rule_id": "SEC-001",
+      "category": "functionality",
+      "check": "No mixed content (HTTP resources on HTTPS pages)",
+      "status": "PASS",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "No mixed content issues found",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IND-001",
+      "category": "content",
+      "check": "FAQ does not contain hours of operations",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "FAQ page does not contain hours of operation",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IND-002",
+      "category": "content",
+      "check": "Photo gallery form instructions are included",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Check that the photo gallery page includes form submission instructions for clients.",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-001",
+      "category": "human_review",
+      "check": "Brand tone and content nuance appropriate for client",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-002",
+      "category": "human_review",
+      "check": "Image appropriateness (especially for sensitive pages: euthanasia, end-of-life)",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-003",
+      "category": "human_review",
+      "check": "Alignment, balance, spacing, color matching consistency across site",
+      "status": "HUMAN_REVIEW",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-004",
+      "category": "human_review",
+      "check": "Formatting and page layout consistent with client branding",
+      "status": "HUMAN_REVIEW",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    }
+  ]
+}

@@ -1,0 +1,352 @@
+{
+  "metadata": {
+    "tool": "Zero-Touch QA Scanner",
+    "version": "1.0.0",
+    "scan_id": "QA-0001",
+    "scan_time": "2026-02-04T13:58:55.349983",
+    "site_url": "https://thestorybookal.wpenginepowered.com",
+    "partner": "independent",
+    "phase": "full",
+    "pages_scanned": 25
+  },
+  "summary": {
+    "score": 82,
+    "total_checks": 33,
+    "passed": 16,
+    "failed": 9,
+    "warnings": 3,
+    "human_review": 5
+  },
+  "results": [
+    {
+      "rule_id": "FUNC-001",
+      "category": "functionality",
+      "check": "All links go to intended pages (no broken links)",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "All 27 links valid",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-002",
+      "category": "functionality",
+      "check": "Phone numbers are correctly hyperlinked (tel: links)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "All visible phone numbers appear to be hyperlinked",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-003",
+      "category": "functionality",
+      "check": "Email addresses are correctly hyperlinked (mailto: links)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-004",
+      "category": "functionality",
+      "check": "Thank you / success pages exist for forms",
+      "status": "WARN",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "Forms found but no thank-you/success pages detected in crawl",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-005",
+      "category": "functionality",
+      "check": "Site responsive on mobile (no horizontal scroll)",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "PageSpeed Insights confirms mobile-friendly (viewport, tap targets, font sizes OK)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FUNC-006",
+      "category": "functionality",
+      "check": "Google Lighthouse performance score acceptable",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "PageSpeed Insights: Performance: 52/100 | Accessibility: 82/100 | CLS: 0.241 | LCP: 8.6\u00a0s",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-001",
+      "category": "craftsmanship",
+      "check": "Logo is linked to the homepage",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Logo links to homepage",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-002",
+      "category": "craftsmanship",
+      "check": "Favicon is present",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Favicon found",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CRAFT-003",
+      "category": "craftsmanship",
+      "check": "Site passes contrast check for accessibility",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "PageSpeed Insights: Insufficient contrast",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-001",
+      "category": "content",
+      "check": "Privacy Policy is linked in the footer",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Privacy Policy link found in footer on https://thestorybookal.wpenginepowered.com",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-002",
+      "category": "content",
+      "check": "Accessibility Statement is linked in the footer",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Accessibility Statement link found in footer on https://thestorybookal.wpenginepowered.com",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-003",
+      "category": "content",
+      "check": "Footer shows \"Powered by PetDesk\" (no Whiskercloud mention)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Footer correctly shows 'Powered by PetDesk'",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-004",
+      "category": "content",
+      "check": "Only one H1 tag per page",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "8 page(s) with incorrect H1 count: https://thestorybookal.wpenginepowered.com/sitemap has 0 H1(s); https://thestorybookal.wpenginepowered.com/blog/wash-your-pets-dishes-3/ has 0 H1(s); https://thestorybookal.wpenginepowered.com/blog/category/uncategorized/ has 0 H1(s); https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/ has 0 H1(s); https://thestorybookal.wpenginepowered.com/blog/wash-your-pets-dishes-2/ has 0 H1(s)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-005",
+      "category": "content",
+      "check": "All images have alt text",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "38 unique image(s) missing alt text:\nClover-Logo.png \u2014 found on: https://thestorybookal.wpenginepowered.com\nPuppy-outside-on-a-hike.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nDog-and-woman-playing-along-the-beach.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nsparkles.png \u2014 found on: https://thestorybookal.wpenginepowered.com\nCat-sniffing-a-butterfly.png \u2014 found on: https://thestorybookal.wpenginepowered.com\nHands-holding-a-heart.png \u2014 found on: https://thestorybookal.wpenginepowered.com\nDog-and-cat-lineart.png \u2014 found on: https://thestorybookal.wpenginepowered.com\nDog-in-the-woods.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nMan-with-an-older-pug.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nWoman-posing-with-a-small-dog.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nWoman-posing-with-a-dog-and-a-cat.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nWoman-smiling-with-a-dog.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com\nfluffy-cat-laying-down.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/about-whiskerframe/\nClover-Logo.png \u2014 found on: https://thestorybookal.wpenginepowered.com/about-whiskerframe/\nVeterinarian-posing-with-a-dog.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/veterinarian-denver-co/\nVeterinary-staff-holding-a-puppy.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\nVeterinary-Staff-with-a-striped-cat.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\nWoman-and-dog-sitting-outside.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/\npuppy-being-checked-by-a-vet.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/\nCat-being-examined-by-vet.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/\nCat-getting-an-ultrasound.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/\nDog-getting-paw-bandaged.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/\nPuppy-getting-check-by-a-vet.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/pet-wellness-denver-co/\ndog-getting-examined-by-vet.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/pet-wellness-denver-co/\nwoman-playing-with-an-orange-cat.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/resources/\nwoman-embracing-a-dog.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/resources/\n28.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/resources/\n29.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/resources/\n30.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/resources/\nwoman-kissing-a-dog.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/\nDog-in-the-waiting-room-at-the-vet-clinic.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/whiskerframe-forms/\nwoman-playing-with-a-kitten-on-her-lap.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/new-client-form/\ndog-playing.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/contact/\ncat-playing.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/denver-co-veterinary-appointment/\npage1-791x1024.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\npage2-791x1024.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\npage3-791x1024.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\npage4-791x1024.jpg \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-006",
+      "category": "content",
+      "check": "Meta titles exist on all pages",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "All pages have meta titles",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-007",
+      "category": "content",
+      "check": "Meta descriptions exist on all pages",
+      "status": "FAIL",
+      "weight": 5,
+      "points_lost": 5,
+      "details": "14 page(s) missing meta description: https://thestorybookal.wpenginepowered.com, https://thestorybookal.wpenginepowered.com/, https://thestorybookal.wpenginepowered.com/privacy-policy/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-008",
+      "category": "content",
+      "check": "No sample/dummy/placeholder text remaining (Lorem Ipsum, etc.)",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "Placeholder text found: \"lorem ipsum\" on https://thestorybookal.wpenginepowered.com; \"dolor sit amet\" on https://thestorybookal.wpenginepowered.com; \"lorem ipsum\" on https://thestorybookal.wpenginepowered.com/; \"dolor sit amet\" on https://thestorybookal.wpenginepowered.com/; \"lorem ipsum\" on https://thestorybookal.wpenginepowered.com/about-whiskerframe/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "CONT-009",
+      "category": "content",
+      "check": "Featured images are set on pages",
+      "status": "WARN",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "18 page(s) missing OG image (featured image proxy): https://thestorybookal.wpenginepowered.com, https://thestorybookal.wpenginepowered.com/, https://thestorybookal.wpenginepowered.com/about-whiskerframe/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-001",
+      "category": "footer",
+      "check": "Social links are in footer only (not in nav bar or top bar)",
+      "status": "PASS",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "Social links correctly placed in footer only",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-002",
+      "category": "footer",
+      "check": "Google map iframe uses location address (not GMB listing with reviews)",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Map iframes appear to use location (not GMB listing)",
+      "page_url": ""
+    },
+    {
+      "rule_id": "FOOT-003",
+      "category": "footer",
+      "check": "No Whiskercloud mentions anywhere on the site",
+      "status": "FAIL",
+      "weight": 1,
+      "points_lost": 1,
+      "details": "\"Whiskercloud\" visible to users on 1 page(s):\nhttps://thestorybookal.wpenginepowered.com/accessibility-statement/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "GRAM-001",
+      "category": "grammar_spelling",
+      "check": "Spelling errors in visible page content",
+      "status": "FAIL",
+      "weight": 3,
+      "points_lost": 3,
+      "details": "62 unique misspelled word(s) (854 total occurrences) across 5 page(s):\n\"ac erat\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"adipiscing\" -> advising, Nipissing \u2014 51 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"aliqua\" -> cliquey, clique \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"aliquip\" -> liquid, aliquot \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"commodo\" -> commode \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"consectetur\" -> consecrator \u2014 51 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"consequat\" -> consequent \u2014 22 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"convallis\" -> Corvallis \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"curae\" -> curve, cure \u2014 4 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"dapibus\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"dolore\" -> Dolores, dolor \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"dui\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"ea\" -> Ea, a \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"eget\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"eiusmod\" -> also, asked \u2014 48 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"eleifend\" -> leaned, elated \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"elit\" -> elite, exit \u2014 51 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"enim\" -> ENIM, denim \u2014 22 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"eros\" -> Eros, eras \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"exercitation\" -> excitation \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"facilisis\" -> facilities, familisms \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"fermentum\" \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"hac\" -> HAC, had \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"hendrerit\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"himenaeos\" -> Ximenes, pimentos \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"incididunt\" -> incident, incipient \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"labore\" -> labor, Lahore \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"laboris\" -> labors, Laborism \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"lacus\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"leo\" -> Leo, L\u00e9o \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"lobortis\" -> Roberts, robots \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"luctus\" -> Lucius \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"magna\" -> Magna, magma \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"massa\" -> Massey, Massa \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"mattis\" -> Mathis, mantis \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"nostrud\" -> nostrum \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"nullam\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"pharetra\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"porta\" -> port, Port \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"porttitor\" -> portion, protector \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"praesent\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"quis\" -> quit, Luis \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"recieved\" -> received, relieved \u2014 1 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n\"ridiculus\" -> ridiculous, ridicules \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"rutrum\" -> rut rum \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"sed\" -> SED, used \u2014 48 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"sem\" -> SEM, set \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"sociosqu\" \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"suspendisse\" -> suspendible \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"taciti\" -> Tahiti, tacit \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"tellus\" -> Tellus, tells \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"tempor\" -> temper, tempo \u2014 40 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"tempus\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"tristique\" -> critique \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"ullamco\" -> Alamo, llama \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"ullamcorper\" \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"ut\" -> UT, at \u2014 62 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"vehicula\" -> vehicular, vesicula \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"velit\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"veniam\" -> venial \u2014 20 occurrence(s)\n  - thestorybookal.wpenginepowered.com/about-whiskerframe/\n  - thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/\n  - thestorybookal.wpenginepowered.com/veterinarian-denver-co/\n\"vestibulum\" -> vestibular, vestibule \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/\n\"viverra\" -> (suggestion limit reached) \u2014 2 occurrence(s)\n  - thestorybookal.wpenginepowered.com\n  - thestorybookal.wpenginepowered.com/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "GRAM-001-G",
+      "category": "grammar_spelling",
+      "check": "Grammar issues in visible page content",
+      "status": "WARN",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "2 unique grammar issue(s) (14 total) across 5 page(s):\nPossible typo: you repeated a word. -> Button \u2014 4 occurrence(s) on: thestorybookal.wpenginepowered.com, thestorybookal.wpenginepowered.com/\nThree successive sentences begin with the same word. Consider rewording the sentence or use a thesaurus to find a synonym. \u2014 10 occurrence(s) on: thestorybookal.wpenginepowered.com, thestorybookal.wpenginepowered.com/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "NAV-001",
+      "category": "navigation",
+      "check": "Inner pages are linked in navigation correctly",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Navigation links resolve correctly",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IMG-001",
+      "category": "functionality",
+      "check": "All images load correctly (no broken image files)",
+      "status": "FAIL",
+      "weight": 3,
+      "points_lost": 3,
+      "details": "4 broken image(s) out of 46:\nhttps://brodheadsvillevet.com/wp-content/uploads/2016/08/page4-791x1024.jpg (status 404) \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\nhttps://brodheadsvillevet.com/wp-content/uploads/2016/08/page3-791x1024.jpg (status 404) \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\nhttps://brodheadsvillevet.com/wp-content/uploads/2016/08/page2-791x1024.jpg (status 404) \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/\nhttps://brodheadsvillevet.com/wp-content/uploads/2016/08/page1-791x1024.jpg (status 404) \u2014 found on: https://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/",
+      "page_url": ""
+    },
+    {
+      "rule_id": "SEO-001",
+      "category": "content",
+      "check": "Open Graph meta tags present for social sharing (og:title, og:description, og:image)",
+      "status": "FAIL",
+      "weight": 2,
+      "points_lost": 2,
+      "details": "24 page(s) missing Open Graph tags: https://thestorybookal.wpenginepowered.com \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/ \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/about-whiskerframe/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/veterinarian-denver-co/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/denver-co-veterinary-jobs/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/denver-co-veterinary-services/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/resources/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/blog/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/whiskerframe-forms/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/new-client-form/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/contact/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/denver-co-veterinary-appointment/ \u2014 missing: og:image\nhttps://thestorybookal.wpenginepowered.com/privacy-policy/ \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/accessibility-statement/ \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/sitemap \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/blog/wash-your-pets-dishes-3/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/blog/author/squidgital/ \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/blog/category/uncategorized/ \u2014 missing: og:description, og:image\nhttps://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-3/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/blog/wash-your-pets-dishes-2/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance-2/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/blog/wash-your-pets-dishes/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/blog/free-trial-trupanion-pet-insurance/ \u2014 missing: og:description\nhttps://thestorybookal.wpenginepowered.com/payment-options/ \u2014 missing: og:description, og:image",
+      "page_url": ""
+    },
+    {
+      "rule_id": "SEC-001",
+      "category": "functionality",
+      "check": "No mixed content (HTTP resources on HTTPS pages)",
+      "status": "PASS",
+      "weight": 3,
+      "points_lost": 0,
+      "details": "No mixed content issues found",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IND-001",
+      "category": "content",
+      "check": "FAQ does not contain hours of operations",
+      "status": "PASS",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "FAQ page does not contain hours of operation",
+      "page_url": ""
+    },
+    {
+      "rule_id": "IND-002",
+      "category": "content",
+      "check": "Photo gallery form instructions are included",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Check that the photo gallery page includes form submission instructions for clients.",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-001",
+      "category": "human_review",
+      "check": "Brand tone and content nuance appropriate for client",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-002",
+      "category": "human_review",
+      "check": "Image appropriateness (especially for sensitive pages: euthanasia, end-of-life)",
+      "status": "HUMAN_REVIEW",
+      "weight": 1,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-003",
+      "category": "human_review",
+      "check": "Alignment, balance, spacing, color matching consistency across site",
+      "status": "HUMAN_REVIEW",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    },
+    {
+      "rule_id": "HUMAN-004",
+      "category": "human_review",
+      "check": "Formatting and page layout consistent with client branding",
+      "status": "HUMAN_REVIEW",
+      "weight": 5,
+      "points_lost": 0,
+      "details": "Requires human judgment - flagged for manual review",
+      "page_url": ""
+    }
+  ]
+}

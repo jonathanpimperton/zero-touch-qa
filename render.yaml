@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: zero-touch-qa
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: PSI_API_KEY
+        sync: false
+      - key: WRIKE_API_TOKEN
+        sync: false
+      - key: WRIKE_CF_SITE_URL
+        sync: false
+      - key: WRIKE_CF_PARTNER
+        sync: false
+      - key: WRIKE_CF_PHASE
+        sync: false

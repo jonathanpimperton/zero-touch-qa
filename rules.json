@@ -1,0 +1,787 @@
+{
+  "universal": [
+    {
+      "id": "BSR-001",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover \"WhiskerFrame\" (uppercase F) text on site",
+      "search_text": "WhiskerFrame",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-002",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover \"Whiskerframe\" (lowercase f) text on site",
+      "search_text": "Whiskerframe",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-003",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover placeholder address (23 Corporate Plaza Dr)",
+      "search_text": "23 Corporate Plaza",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-004",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover placeholder city \"Denver, CO 80206\"",
+      "search_text": "Denver, CO 80206",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-005",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover placeholder phone (949-232-4040)",
+      "search_text": "949-232-4040",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-006",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover placeholder email (frame@whiskercloud.com)",
+      "search_text": "frame@whiskercloud.com",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "BSR-007",
+      "category": "search_replace",
+      "phase": [
+        "prototype"
+      ],
+      "check": "No leftover placeholder email (info@happytailsvetclinic.com)",
+      "search_text": "info@happytailsvetclinic.com",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_leftover_text"
+    },
+    {
+      "id": "FUNC-001",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "All links go to intended pages (no broken links)",
+      "automated": true,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": "check_broken_links"
+    },
+    {
+      "id": "FUNC-002",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Phone numbers are correctly hyperlinked (tel: links)",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_phone_links"
+    },
+    {
+      "id": "FUNC-003",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Email addresses are correctly hyperlinked (mailto: links)",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_email_links"
+    },
+    {
+      "id": "FUNC-004",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Thank you / success pages exist for forms",
+      "automated": true,
+      "weight": 3,
+      "partners": "all",
+      "check_fn": "check_form_success_pages"
+    },
+    {
+      "id": "FUNC-005",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Site responsive on mobile (no horizontal scroll)",
+      "automated": true,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": "check_mobile_responsive"
+    },
+    {
+      "id": "FUNC-006",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Google Lighthouse performance score acceptable",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_lighthouse"
+    },
+    {
+      "id": "CRAFT-001",
+      "category": "craftsmanship",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Logo is linked to the homepage",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_logo_links_home"
+    },
+    {
+      "id": "CRAFT-002",
+      "category": "craftsmanship",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Favicon is present",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_favicon"
+    },
+    {
+      "id": "CRAFT-003",
+      "category": "craftsmanship",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Site passes contrast check for accessibility",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_contrast"
+    },
+    {
+      "id": "CONT-001",
+      "category": "content",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Privacy Policy is linked in the footer",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_privacy_policy_footer"
+    },
+    {
+      "id": "CONT-002",
+      "category": "content",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Accessibility Statement is linked in the footer",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_accessibility_footer"
+    },
+    {
+      "id": "CONT-003",
+      "category": "content",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Footer shows \"Powered by PetDesk\" (no Whiskercloud mention)",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_powered_by_petdesk"
+    },
+    {
+      "id": "CONT-004",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Only one H1 tag per page",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_single_h1"
+    },
+    {
+      "id": "CONT-005",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "All images have alt text",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_alt_text"
+    },
+    {
+      "id": "CONT-006",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Meta titles exist on all pages",
+      "automated": true,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": "check_meta_titles"
+    },
+    {
+      "id": "CONT-007",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Meta descriptions exist on all pages",
+      "automated": true,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": "check_meta_descriptions"
+    },
+    {
+      "id": "CONT-008",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "No sample/dummy/placeholder text remaining (Lorem Ipsum, etc.)",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_placeholder_text"
+    },
+    {
+      "id": "CONT-009",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Featured images are set on pages",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_featured_images"
+    },
+    {
+      "id": "CONT-010",
+      "category": "content",
+      "phase": [
+        "final"
+      ],
+      "check": "Accessibility widget (UserWay) is present",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_userway_widget"
+    },
+    {
+      "id": "FOOT-001",
+      "category": "footer",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Social links are in footer only (not in nav bar or top bar)",
+      "automated": true,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": "check_social_links_footer_only"
+    },
+    {
+      "id": "FOOT-002",
+      "category": "footer",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Google map iframe uses location address (not GMB listing with reviews)",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_map_iframe"
+    },
+    {
+      "id": "FOOT-003",
+      "category": "footer",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "No Whiskercloud mentions anywhere on the site",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_no_whiskercloud"
+    },
+    {
+      "id": "GRAM-001",
+      "category": "grammar_spelling",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "No grammar or spelling errors in visible page content",
+      "automated": true,
+      "weight": 3,
+      "partners": "all",
+      "check_fn": "check_grammar_spelling"
+    },
+    {
+      "id": "NAV-001",
+      "category": "navigation",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Inner pages are linked in navigation correctly",
+      "automated": true,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": "check_nav_links"
+    },
+    {
+      "id": "IMG-001",
+      "category": "functionality",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "All images load correctly (no broken image files)",
+      "automated": true,
+      "weight": 3,
+      "partners": "all",
+      "check_fn": "check_broken_images"
+    },
+    {
+      "id": "SEO-001",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Open Graph meta tags present for social sharing (og:title, og:description, og:image)",
+      "automated": true,
+      "weight": 2,
+      "partners": "all",
+      "check_fn": "check_open_graph"
+    },
+    {
+      "id": "SEC-001",
+      "category": "functionality",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "No mixed content (HTTP resources on HTTPS pages)",
+      "automated": true,
+      "weight": 3,
+      "partners": "all",
+      "check_fn": "check_mixed_content"
+    },
+    {
+      "id": "HUMAN-001",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Brand tone and content nuance appropriate for client",
+      "automated": false,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": null
+    },
+    {
+      "id": "HUMAN-002",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Image appropriateness (especially for sensitive pages: euthanasia, end-of-life)",
+      "automated": false,
+      "weight": 1,
+      "partners": "all",
+      "check_fn": null
+    },
+    {
+      "id": "HUMAN-003",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Alignment, balance, spacing, color matching consistency across site",
+      "automated": false,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": null
+    },
+    {
+      "id": "HUMAN-004",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Formatting and page layout consistent with client branding",
+      "automated": false,
+      "weight": 5,
+      "partners": "all",
+      "check_fn": null
+    }
+  ],
+  "western": [
+    {
+      "id": "WVP-001",
+      "category": "cta",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "All CTAs must say \"Book Appointment\" (regardless of platform)",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_cta_text",
+      "expected_cta_text": "Book Appointment"
+    },
+    {
+      "id": "WVP-002",
+      "category": "cta",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "CTA must be on Home, About, and Services pages",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_cta_on_pages",
+      "required_pages": [
+        "home",
+        "about",
+        "services"
+      ]
+    },
+    {
+      "id": "WVP-003",
+      "category": "navigation",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Navigation follows Western layout: Home | About Us (dropdown) | Services (dropdown) | Resources | Specials | Appointment",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_nav_structure",
+      "expected_nav": [
+        "Home",
+        "About Us",
+        "Services",
+        "Resources",
+        "Specials",
+        "Appointment"
+      ]
+    },
+    {
+      "id": "WVP-004",
+      "category": "content",
+      "phase": [
+        "prototype",
+        "full",
+        "final"
+      ],
+      "check": "Home page H1 should only say hospital name (no \"Welcome to\")",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_h1_no_welcome"
+    },
+    {
+      "id": "WVP-005",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Birdeye testimonial widget is present on the homepage",
+      "automated": true,
+      "weight": 3,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_birdeye_widget"
+    },
+    {
+      "id": "WVP-006",
+      "category": "navigation",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Top bar: Phone and Email on left, Download App and Online Pharmacy on right",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_topbar_layout"
+    },
+    {
+      "id": "WVP-007",
+      "category": "navigation",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "No social links in top bar or navigation (footer only)",
+      "automated": true,
+      "weight": 5,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_social_links_footer_only"
+    },
+    {
+      "id": "WVP-008",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Only 5 services listed in nav (rest under View All Services)",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_service_count",
+      "max_services": 5
+    },
+    {
+      "id": "WVP-009",
+      "category": "forms",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "General New Client Form exists (even if not provided)",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_new_client_form"
+    },
+    {
+      "id": "WVP-010",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Privacy Policy uses updated Western verbiage",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_privacy_policy_verbiage"
+    },
+    {
+      "id": "WVP-011",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Photos: No syringes, gloves, incorrect medical gear (unless hospital-provided)",
+      "automated": false,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": null
+    },
+    {
+      "id": "WVP-012",
+      "category": "human_review",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Service pictures anatomically correct and correlate to service",
+      "automated": false,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": null
+    },
+    {
+      "id": "WVP-013",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Euthanasia/end-of-life pages use stock imagery only (no real pet photos)",
+      "automated": false,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": null
+    },
+    {
+      "id": "WVP-014",
+      "category": "footer",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "No appointment CTA section on euthanasia/end-of-life footer pages",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_no_appt_cta_euthanasia"
+    },
+    {
+      "id": "WVP-015",
+      "category": "forms",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Career page uses custom applicant tracking URL (not a form)",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "western"
+      ],
+      "check_fn": "check_career_tracking_url"
+    }
+  ],
+  "independent": [
+    {
+      "id": "IND-001",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "FAQ does not contain hours of operations",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "independent"
+      ],
+      "check_fn": "check_faq_no_hours"
+    },
+    {
+      "id": "IND-002",
+      "category": "content",
+      "phase": [
+        "full",
+        "final"
+      ],
+      "check": "Photo gallery form instructions are included",
+      "automated": true,
+      "weight": 1,
+      "partners": [
+        "independent"
+      ],
+      "check_fn": "check_photo_gallery_instructions"
+    }
+  ],
+  "heartland": [],
+  "evervet": [],
+  "encore": [],
+  "amerivet": [],
+  "rarebreed": [],
+  "united": []
+}
