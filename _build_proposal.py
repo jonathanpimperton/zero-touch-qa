@@ -543,7 +543,7 @@ def main():
         <h1 style="font-size: 36px; color: #fff; margin-bottom: 16px;">Zero-Touch QA</h1>
         <p style="font-size: 18px; color: #DDEE91; font-weight: 600; margin-bottom: 20px;">Scan smarter. Ship faster.</p>
         <p style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">Ready for pilot</p>
-        <p style="font-size: 13px; color: rgba(255,255,255,0.5);">Live demo: <span id="live-url">URL available after deployment</span></p>
+        <p style="font-size: 13px; color: rgba(255,255,255,0.5);">Live demo: <span id="live-url" style="color: #DDEE91;">zero-touch-qa.onrender.com</span></p>
         <div class="slide-num">17</div>
     </div>
     ''')
