@@ -999,9 +999,15 @@ RULES_EDIT_PAGE = """<!DOCTYPE html>
     <div class="container">
         <div class="intro">
             <strong>QA team: this is your page.</strong> You can add new rules, change existing ones, or remove rules you no longer need.
-            Changes take effect immediately on the next scan. Each rule needs an <strong>ID</strong> (unique code like BSR-001),
-            a <strong>description</strong> of what to check, a <strong>category</strong>, which <strong>phases</strong> it applies to,
-            and a <strong>weight</strong> (1 = minor, 5 = critical).
+            Changes take effect immediately on the next scan.
+            <div style="margin-top: 12px; padding: 12px 16px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <p style="font-weight: 700; margin-bottom: 8px; font-size: 13px;">What you can add without coding:</p>
+                <ul style="font-size: 13px; line-height: 1.8; padding-left: 20px; margin: 0;">
+                    <li><strong>Search for text on site</strong> &mdash; The scanner will check every page for specific text (e.g. a placeholder name, old branding, wrong phone number). If found, it fails.</li>
+                    <li><strong>Human review checklist item</strong> &mdash; Adds an item to the report's manual review checklist. The reviewer marks Pass/Fail/N/A during review.</li>
+                </ul>
+                <p style="font-size: 12px; color: #6b7280; margin-top: 8px;">Other types of automated checks (broken links, alt text, etc.) require a developer to add the check function.</p>
+            </div>
         </div>
 
         {% if success %}
@@ -1105,14 +1111,17 @@ RULES_EDIT_PAGE = """<!DOCTYPE html>
                         <option value="united">United only</option>
                     </select>
                 </div>
-                <div class="checkbox-row">
-                    <input type="checkbox" name="automated" id="automated">
-                    <label for="automated">This can be checked automatically by the scanner (uncheck for human-review-only items)</label>
-                </div>
                 <div class="form-row">
-                    <label for="search_text">Search Text (optional, for template text checks)</label>
-                    <input type="text" name="search_text" id="search_text" placeholder="e.g. WhiskerFrame">
-                    <div class="hint">If set, the scanner will look for this exact text on the site. Leave blank for other check types.</div>
+                    <label for="rule_type">Rule Type</label>
+                    <select name="rule_type" id="rule_type" onchange="toggleSearchText()">
+                        <option value="human_review">Human Review — adds a checklist item for manual review</option>
+                        <option value="search_text">Search for Text — scanner checks every page for specific text</option>
+                    </select>
+                </div>
+                <div class="form-row" id="searchTextRow" style="display:none;">
+                    <label for="search_text">Text to Search For</label>
+                    <input type="text" name="search_text" id="search_text" placeholder="e.g. WhiskerFrame, 555-0100, old clinic name">
+                    <div class="hint">The scanner will search every page for this exact text. If found anywhere on the site, the check fails. Case-insensitive. Good for catching leftover placeholder text, old branding, or wrong contact details.</div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -1128,6 +1137,10 @@ RULES_EDIT_PAGE = """<!DOCTYPE html>
     }
     function closeModal() {
         document.getElementById('modal').classList.remove('active');
+    }
+    function toggleSearchText() {
+        var sel = document.getElementById('rule_type').value;
+        document.getElementById('searchTextRow').style.display = sel === 'search_text' ? 'block' : 'none';
     }
     document.getElementById('modal').addEventListener('click', function(e) {
         if (e.target === this) closeModal();
@@ -1150,21 +1163,21 @@ def rules_edit():
             phases = request.form.getlist("phase")
             if not phases:
                 phases = ["full", "final"]
+            rule_type = request.form.get("rule_type", "human_review")
+            search_text = request.form.get("search_text", "").strip()
+            is_automated = rule_type == "search_text" and search_text
             new_rule = {
                 "id": request.form.get("rule_id", "").strip(),
                 "category": request.form.get("category", "content"),
                 "phase": phases,
                 "check": request.form.get("check", "").strip(),
-                "automated": "automated" in request.form,
+                "automated": is_automated,
                 "weight": int(request.form.get("weight", 1)),
                 "partners": "all" if group == "universal" else [group],
             }
-            search_text = request.form.get("search_text", "").strip()
-            if search_text:
+            if is_automated:
                 new_rule["search_text"] = search_text
                 new_rule["check_fn"] = "check_leftover_text"
-            elif new_rule["automated"] and new_rule["category"] == "human_review":
-                new_rule["automated"] = False
             if new_rule["id"] and new_rule["check"]:
                 if group not in data:
                     data[group] = []
@@ -1243,6 +1256,7 @@ def api_scan():
             "score": report.score,
             "scan_time": report.scan_time,
             "report_file": report_filename,
+            "_json_file": json_filename,
         })
 
         # Post to Wrike if task ID provided
