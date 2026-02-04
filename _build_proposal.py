@@ -19,6 +19,12 @@ def main():
     logo_white_uri = _load_asset("Petdesk Logo White Text.png")  # White text (dark backgrounds)
     bg_purple_uri = _load_asset("Petdesk background purple.png")  # Brand purple texture
 
+    # Screenshots of the web interface
+    ss_scanner = _load_asset("screenshot_scanner.png")
+    ss_report = _load_asset("screenshot_report.png")
+    ss_history = _load_asset("screenshot_history.png")
+    ss_rules = _load_asset("screenshot_rules.png")
+
     slides = []
 
     # SLIDE 1: Title slide (DARK)
@@ -245,27 +251,25 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>How Users Interact</h2>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-            <div class="interaction-card" style="border: 2px solid #22c55e; position: relative;">
-                <div class="tag" style="background: #22c55e;">AVAILABLE NOW</div>
-                <h3 style="color: #22c55e; margin-bottom: 12px; font-size: 16px;">Web Browser (Available Now)</h3>
-                <ol style="font-size: 13px; line-height: 1.8; padding-left: 20px;">
-                    <li>Open the scanner web app</li>
-                    <li>Paste the site URL, pick Partner and Phase</li>
-                    <li>Click Run QA Scan</li>
-                    <li>View and share the HTML report</li>
-                </ol>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+            <div>
+                <div class="interaction-card" style="border: 2px solid #22c55e; position: relative; margin-bottom: 12px;">
+                    <div class="tag" style="background: #22c55e;">AVAILABLE NOW</div>
+                    <h3 style="color: #22c55e; margin-bottom: 8px; font-size: 14px;">Web Browser</h3>
+                    <ol style="font-size: 12px; line-height: 1.7; padding-left: 18px; margin: 0;">
+                        <li>Open the scanner web app</li>
+                        <li>Paste the site URL, pick Partner and Phase</li>
+                        <li>Click <strong>Run QA Scan</strong></li>
+                        <li>View and share the HTML report</li>
+                    </ol>
+                </div>
+                <div class="interaction-card" style="border: 2px solid #9ca3af; position: relative;">
+                    <div class="tag" style="background: #9ca3af;">FUTURE</div>
+                    <h3 style="color: #6b7280; margin-bottom: 8px; font-size: 14px;">Wrike Integration</h3>
+                    <p style="font-size: 12px; line-height: 1.6; margin: 0;">Move a Wrike task to &ldquo;QA In Progress&rdquo; &rarr; scan runs automatically &rarr; PDF report attached to the task.</p>
+                </div>
             </div>
-            <div class="interaction-card" style="border: 2px solid #9ca3af; position: relative;">
-                <div class="tag" style="background: #9ca3af;">FUTURE TARGET</div>
-                <h3 style="color: #6b7280; margin-bottom: 12px; font-size: 16px;">Wrike Integration (Future Target)</h3>
-                <ol style="font-size: 13px; line-height: 1.8; padding-left: 20px;">
-                    <li>Designer fills in custom fields on Wrike task</li>
-                    <li>Moves task to QA In Progress</li>
-                    <li>Scanner runs automatically via webhook</li>
-                    <li>PDF report attached to the Wrike task</li>
-                </ol>
-            </div>
+            {f'<div style="border: 2px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"><img src="{ss_scanner}" alt="Scanner UI" style="width: 100%; display: block;" /></div>' if ss_scanner else ''}
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">8</div>
@@ -313,38 +317,27 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>What the Report Looks Like</h2>
-        <div style="border: 2px solid #e5e7eb; border-radius: 8px; padding: 20px; background: #fafafa;">
-            <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb; margin-bottom: 16px;">
-                <img src="{logo_uri}" alt="Logo" style="height: 24px;" />
-                <h3 style="margin: 0; font-size: 18px;">QA Report</h3>
-            </div>
-            <div style="display: flex; gap: 20px; align-items: start;">
-                <div style="flex-shrink: 0;">
-                    <div class="score-ring" style="background: conic-gradient(#5820BA 0% 82%, #e5e7eb 82% 100%); width: 100px; height: 100px;">
-                        <div class="score-inner">
-                            <div class="score-number" style="font-size: 28px;">82</div>
-                            <div class="score-label" style="font-size: 11px;">/100</div>
-                        </div>
+        <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start;">
+            {f'<div style="border: 2px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"><img src="{ss_report}" alt="QA Report" style="width: 100%; display: block;" /></div>' if ss_report else ''}
+            <div>
+                <div style="margin-bottom: 12px;">
+                    <div style="background: #fef2f2; border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
+                        <p style="font-size: 12px; font-weight: 600; color: #dc2626;">Failures &mdash; action required</p>
+                    </div>
+                    <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
+                        <p style="font-size: 12px; font-weight: 600; color: #d97706;">Warnings &mdash; review recommended</p>
+                    </div>
+                    <div style="background: #faf5ff; border-left: 3px solid #5820BA; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
+                        <p style="font-size: 12px; font-weight: 600; color: #5820BA;">Human Review &mdash; interactive checklist</p>
+                    </div>
+                    <div style="background: #f3f4f6; border-left: 3px solid #9ca3af; padding: 8px 12px; border-radius: 4px;">
+                        <p style="font-size: 12px; font-weight: 600; color: #6b7280;">Full Breakdown &mdash; every check by category</p>
                     </div>
                 </div>
-                <div style="flex-grow: 1;">
-                    <div style="margin-bottom: 10px;">
-                        <div style="background: #fef2f2; border-left: 3px solid #ef4444; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
-                            <p style="font-size: 12px; font-weight: 600; color: #dc2626;">Failures (red)</p>
-                        </div>
-                        <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px;">
-                            <p style="font-size: 12px; font-weight: 600; color: #d97706;">Warnings (amber)</p>
-                        </div>
-                        <div style="background: #faf5ff; border-left: 3px solid #5820BA; padding: 8px 12px; border-radius: 4px;">
-                            <p style="font-size: 12px; font-weight: 600; color: #5820BA;">Human Review Checklist (purple)</p>
-                        </div>
-                    </div>
-                    <p style="font-size: 11px; color: #6b7280; line-height: 1.4;">Full category breakdown with every check result</p>
+                <div style="background: #FAF5FF; border-left: 4px solid #2DCCE8; padding: 10px 14px; border-radius: 4px;">
+                    <p style="font-size: 12px; font-weight: 500;">HTML reports: viewable in any browser, printable as PDF, shareable via link.</p>
                 </div>
             </div>
-        </div>
-        <div style="background: #FAF5FF; border-left: 4px solid #2DCCE8; padding: 12px 16px; border-radius: 4px; margin-top: 16px;">
-            <p style="font-size: 13px; font-weight: 500;">Reports are HTML — viewable in any browser, printable as PDF, shareable via link.</p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">10</div>
@@ -355,29 +348,19 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>How QA Rules Work</h2>
-        <div style="margin-bottom: 16px;">
-            <ul style="font-size: 13px; line-height: 1.8; padding-left: 20px;">
-                <li>Rules are stored in a simple file (rules.json) &mdash; not buried in code</li>
-                <li>Each rule has a weight (1x-5x) that determines how much a failure impacts the score</li>
-                <li>Different rules apply to different partners (Western, Independent, etc.) and build phases (Prototype, Full, Final)</li>
-            </ul>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
-            <div class="card" style="background: #ecfdf5; border-left: 4px solid #22c55e;">
-                <h3 style="color: #22c55e; font-size: 13px;">View Rules</h3>
-                <p style="font-size: 12px; line-height: 1.5;">Open the web app &rarr; click <strong>View Rules</strong>. Filter by partner and build phase.</p>
+        <div style="display: grid; grid-template-columns: 2fr 3fr; gap: 20px; align-items: start;">
+            <div>
+                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px; margin-bottom: 12px;">
+                    <li>Rules stored in a simple data file &mdash; not buried in code</li>
+                    <li>Each rule has a weight (1x&ndash;5x) that determines score impact</li>
+                    <li>Different rules for different partners and build phases</li>
+                </ul>
+                <div class="card" style="background: #ecfdf5; border-left: 4px solid #22c55e; margin-bottom: 8px;">
+                    <h3 style="color: #22c55e; font-size: 12px;">QA Team Self-Service</h3>
+                    <p style="font-size: 11px; line-height: 1.5;">View, add, edit, or delete rules through the browser. No coding needed. Changes take effect on the next scan.</p>
+                </div>
             </div>
-            <div class="card" style="background: #DDEE91; border-left: 4px solid #5820BA;">
-                <h3 style="color: #3C1161; font-size: 13px;">Edit Rules</h3>
-                <p style="font-size: 12px; line-height: 1.5;">Open the web app &rarr; click <strong>Edit Rules</strong>. Add new rules, delete old ones, change weights. No coding needed.</p>
-            </div>
-            <div class="card" style="background: #eff6ff; border-left: 4px solid #2DCCE8;">
-                <h3 style="color: #0284c7; font-size: 13px;">QA Owns This</h3>
-                <p style="font-size: 12px; line-height: 1.5;">The QA team manages all rules directly through the web app. No developer involvement required.</p>
-            </div>
-        </div>
-        <div class="callout" style="margin-top: 14px; font-size: 13px;">
-            The QA team can add, modify, or remove rules at any time through the browser. Changes take effect on the next scan.
+            {f'<div style="border: 2px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"><img src="{ss_rules}" alt="Rules Viewer" style="width: 100%; display: block;" /></div>' if ss_rules else ''}
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">11</div>
@@ -411,19 +394,21 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>Scan History & Audit Trail</h2>
-        <div style="margin-bottom: 16px;">
-            <p style="font-size: 14px; line-height: 1.6; margin-bottom: 12px;">Every scan saves two files: an HTML report (visual) and a JSON file (audit trail)</p>
-        </div>
-        <div class="card" style="margin-bottom: 16px;">
-            <h3 style="margin-bottom: 10px;">View scan history:</h3>
-            <p style="font-size: 13px; line-height: 1.6;">Open the scanner web app and click the History tab</p>
-        </div>
-        <div class="card" style="margin-bottom: 16px;">
-            <h3 style="margin-bottom: 10px;">History shows:</h3>
-            <p style="font-size: 13px; line-height: 1.6;">Site URL, partner, phase, score, date, and link to the full report</p>
-        </div>
-        <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 12px 16px; border-radius: 4px;">
-            <p style="font-size: 13px; font-weight: 500;">In production: records would be stored in a database for long-term searchable access</p>
+        <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start;">
+            {f'<div style="border: 2px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"><img src="{ss_history}" alt="Scan History" style="width: 100%; display: block;" /></div>' if ss_history else ''}
+            <div>
+                <p style="font-size: 13px; line-height: 1.6; margin-bottom: 12px;">Every scan is saved with its full HTML report and JSON audit trail.</p>
+                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px; margin-bottom: 12px;">
+                    <li>Search by site URL or scan ID</li>
+                    <li>Filter by partner, phase, or score range</li>
+                    <li>Sortable columns &mdash; click any header</li>
+                    <li>Score bar visualization</li>
+                    <li>Direct links to full reports and JSON data</li>
+                </ul>
+                <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 14px; border-radius: 4px;">
+                    <p style="font-size: 12px; font-weight: 500;">Scan history is stored in a PostgreSQL database &mdash; persists across deploys.</p>
+                </div>
+            </div>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">13</div>

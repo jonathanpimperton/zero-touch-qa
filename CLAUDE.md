@@ -14,10 +14,11 @@ User (browser)  or  Wrike (webhook)
           \            /
            app.py (Flask web server)
               |
-     +--------+--------+
-     |                  |
-qa_rules.py      qa_scanner.py
-(rule engine)    (crawler + 41 check functions)
+     +--------+--------+---------+
+     |                  |         |
+qa_rules.py      qa_scanner.py  db.py
+(rule engine)    (crawler +      (PostgreSQL
+                  41 checks)      persistence)
                         |
                   qa_report.py
                   (HTML + JSON output)
@@ -29,9 +30,9 @@ qa_rules.py      qa_scanner.py
 |-------|---------|
 | `/` | Scanner home page. Paste a URL, pick Partner and Phase, click Run QA Scan. |
 | `/rules` | Browse all QA rules. Filter by partner and build phase. See each rule's category, weight, and whether it's automated or human-review. |
-| `/rules/edit` | Add, delete, or modify QA rules through the browser. No coding needed. |
+| `/rules/edit` | Add, delete, or modify QA rules through the browser. Guided UI explains what non-coders can do: "Search for text" rules and human review checklist items. |
 | `/history` | View all past scans with scores, dates, and links to full HTML reports. Includes search by URL/scan ID, filter by partner/phase/score, sortable columns, and summary stats. |
-| `/reports/<filename>` | View a specific scan report. |
+| `/reports/<filename>` | View a specific scan report (served from database or filesystem). |
 | `/api/scan` | API endpoint (POST) for running scans programmatically. |
 | `/webhook/wrike` | Wrike webhook endpoint for automated scan triggering (future). |
 
@@ -40,36 +41,47 @@ qa_rules.py      qa_scanner.py
 | File | Purpose |
 |------|---------|
 | `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Embeds PetDesk logo. |
+| `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
 | `qa_scanner.py` | Site crawler and 41 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions. Integrates with Google PageSpeed Insights API and LanguageTool API (grammar/spelling). Checks include broken links, broken images, Open Graph tags, mixed content, and more. |
 | `qa_report.py` | Report generators. `generate_html_report()` produces a polished HTML report with PetDesk brand assets, SVG score ring, colored section banners, collapsible detail lists, interactive human review checklist (Pass/Fail/N/A buttons + comments), a non-printing toolbar (Copy URL, Save as PDF, navigation), and print-friendly layout. `generate_wrike_comment()` produces Wrike-formatted HTML. `generate_json_report()` produces JSON for audit trail. |
 | `rules.json` | All QA rules as JSON data. Editable via `/rules/edit` in the web app. Contains universal rules and partner-specific overlays. |
 | `run_qa.py` | CLI fallback for testing. Not the primary interface. |
-| `proposal.html` | Professional HTML presentation (17 slides) for hackathon submission. Print to PDF from browser. Uses PetDesk template colors and fonts. |
-| `_build_proposal.py` | Script to regenerate `proposal.html`. Run `python _build_proposal.py` if slides need updating. |
+| `proposal.html` | Professional HTML presentation (17 slides) for hackathon submission with embedded screenshots of the web interface. Print to PDF from browser. Uses PetDesk template colors and fonts. |
+| `_build_proposal.py` | Script to regenerate `proposal.html`. Run `python _build_proposal.py` if slides need updating. Loads brand assets and screenshot PNGs as base64. |
 | `PROPOSAL.md` | Markdown version of the hackathon proposal. |
 | `Petdesk Logo.png` | PetDesk logo (purple text, high-res) for white backgrounds. Base64-embedded in reports and web UI. |
 | `Petdesk Logo White Text.png` | PetDesk logo (white text, high-res) for dark/purple backgrounds. Used in report headers and dark proposal slides. |
 | `Petdesk background purple.png` | PetDesk brand purple diamond texture background. Used in report headers, web UI headers, and dark proposal slides. |
+| `screenshot_scanner.png` | Screenshot of the scanner home page. Embedded in proposal slide 8. |
+| `screenshot_report.png` | Screenshot of a QA report. Embedded in proposal slide 10. |
+| `screenshot_history.png` | Screenshot of the scan history page. Embedded in proposal slide 13. |
+| `screenshot_rules.png` | Screenshot of the rules viewer page. Embedded in proposal slide 11. |
 | `demo_test_site.html/json` | Demo scan of the test site (thestorybookal). HTML report + JSON audit trail. |
 | `demo_final_site.html/json` | Demo scan of the final site (essentialsfina). HTML report + JSON audit trail. |
 | `.env` | Credentials and API keys. Never committed. |
 | `.gitignore` | Excludes `.env`, `__pycache__`, `reports/`, `*.xlsx`, `*.pdf`, `*.pptx`, and temp files from version control. |
-| `requirements.txt` | Python dependencies including gunicorn and playwright for production deployment. |
+| `requirements.txt` | Python dependencies including gunicorn, playwright, and psycopg2-binary for production deployment. |
 | `Dockerfile` | Container config for cloud deployment. Includes Chromium for Playwright headless browser. |
-| `render.yaml` | Render.com deployment configuration. Uses Docker runtime for Playwright/Chromium support. |
+| `render.yaml` | Render.com deployment configuration. Uses Docker runtime. Includes PostgreSQL database service definition. |
 | `Procfile` | Heroku/Railway-compatible process file. |
 
 ## Cloud Deployment
 
-The app is designed to run in the cloud, not locally. Options:
+**Live app**: https://zero-touch-qa.onrender.com
+**GitHub repo**: https://github.com/jonathanpimperton/zero-touch-qa (private)
 
-### Render.com (recommended for hackathon)
-1. Push code to a GitHub repo
-2. Connect repo to Render.com (free tier)
-3. Render reads `render.yaml` and deploys automatically
-4. Set environment variables (PSI_API_KEY, WRIKE_API_TOKEN) in Render dashboard
-5. App gets a public URL like `https://zero-touch-qa.onrender.com`
+The app is deployed on Render.com (free tier) via Docker. Pushing to `main` on GitHub triggers an automatic redeploy. Environment variables (`PSI_API_KEY`) are set in the Render dashboard. The `render.yaml` also defines a free PostgreSQL database (`zero-touch-qa-db`) that Render provisions automatically and links via `DATABASE_URL`.
+
+Note: The free tier spins down after ~15 minutes of inactivity. First request after sleep takes ~50 seconds to wake up, then runs normally. The free PostgreSQL tier expires after 90 days — upgrade to $7/month for permanent persistence.
+
+### Render.com setup (already done)
+1. GitHub repo connected to Render.com
+2. Render reads `render.yaml` and builds from `Dockerfile`
+3. PostgreSQL database provisioned automatically via `render.yaml`
+4. Environment variables set in Render dashboard: `PSI_API_KEY`
+5. `DATABASE_URL` auto-linked from the database service
+6. Auto-deploys on every push to `main`
 
 ### Docker (any cloud)
 ```
@@ -82,6 +94,27 @@ docker run -p 5000:5000 --env-file .env zero-touch-qa
 pip install -r requirements.txt
 python app.py
 ```
+
+Local development works without PostgreSQL — when `DATABASE_URL` is not set, the app falls back to filesystem storage in `reports/`.
+
+## Database Persistence
+
+Scan results are stored in PostgreSQL (when `DATABASE_URL` is set) for persistence across deploys. The database layer (`db.py`) provides:
+
+- **`scans` table** — stores scan metadata, full HTML report, and JSON audit trail for every scan
+- **`scan_id_map` table** — maps site+phase combinations to scan IDs (QA-0001, etc.) using a PostgreSQL SEQUENCE for atomic ID generation
+- **Automatic fallback** — all `db_*` functions return `None` when no database is configured, and `app.py` falls through to filesystem logic
+- **One-time seed** — on first startup with a database, existing filesystem reports are automatically imported via `db_seed_from_filesystem()`
+
+Key functions in `db.py`:
+| Function | Purpose |
+|----------|---------|
+| `init_db()` | Creates tables/sequence if they don't exist. Called at startup. |
+| `db_get_scan_id(site_url, phase)` | Gets or creates a scan ID using PostgreSQL SEQUENCE. |
+| `db_save_scan(meta, html, json)` | Inserts a scan row with full report content. |
+| `db_load_scan_history()` | Loads all scans for the history page. |
+| `db_get_report(filename, type)` | Fetches HTML or JSON report by filename. |
+| `db_seed_from_filesystem(reports_dir)` | One-time import of existing files into DB. |
 
 ## Partners and Phases
 
@@ -149,15 +182,16 @@ When a fetched page has very little visible body text (under 200 chars) despite 
 Rules are stored in `rules.json` (not hardcoded in Python). The QA team manages rules entirely through the web app:
 
 - **View rules** at `/rules` - Browse all rules organized by category, filter by partner and build phase
-- **Edit rules** at `/rules/edit` - Add new rules, delete rules, change weights. No coding, no files to edit, no developer needed
+- **Edit rules** at `/rules/edit` - Guided interface explains two types of rules non-coders can add:
+  1. **Search for text** — scanner checks every page for specific text (placeholder names, old branding, wrong contact details). Fully automated.
+  2. **Human review checklist item** — adds a manual check to the report with Pass/Fail/N/A buttons.
+  - Other automated checks (broken links, alt text, etc.) require a developer to add the check function.
 - Changes are saved to `rules.json` and take effect on the next scan
 - Each rule has: ID, description, category, weight (1-5), applicable phases, and partner scope
 
 ## Scan History
 
-Every scan produces two files in the `reports/` directory:
-- **HTML report** - Visual report viewable in any browser, printable as PDF. Includes interactive human review section with Pass/Fail/N/A buttons and comments for each manual check item.
-- **JSON file** - Machine-readable audit trail with every check result
+Every scan is stored in the PostgreSQL database with its full HTML report and JSON audit trail. In local dev (no database), reports are saved as files in `reports/`.
 
 View scan history at `/history` in the web app. The history page features:
 - **Summary stats** at the top (total scans, passing count, needs-work count)
@@ -167,21 +201,15 @@ View scan history at `/history` in the web app. The history page features:
 - **Score bars** — visual mini progress bar next to each score
 - **JSON download** — direct link to the JSON audit trail for each scan
 
-History is loaded from saved JSON files on app startup, so records persist across restarts.
+History persists across deploys via PostgreSQL. No data lost on redeploy.
 
 ## Scan IDs
 
-Each scan gets a unique ID (QA-0001, QA-0002, ...). The ID is determined by the combination of site URL + build phase — re-scanning the same site at the same phase reuses the same ID. A new site or different phase gets the next available number.
-
-IDs are stored in `reports/scan_counter.json` and appear in:
-- Report header badge (e.g., "QA-0001 · QA Report")
-- Report footer
-- JSON audit trail (`metadata.scan_id`)
-- History page table
-- CLI output
+Each scan gets a unique ID (QA-0001, QA-0002, ...). The ID is determined by the combination of site URL + build phase — re-scanning the same site at the same phase reuses the same ID. A new site or different phase gets the next available number. IDs are generated atomically via PostgreSQL SEQUENCE (or `scan_counter.json` as fallback).
 
 ## Key Configuration (.env)
 
+- `DATABASE_URL` - PostgreSQL connection string. Set automatically by Render via `render.yaml`. Without it, app falls back to filesystem storage.
 - `PSI_API_KEY` - Google PageSpeed Insights key. Enables rendered-page checks (mobile usability, performance, contrast, CLS). Free from Google Cloud Console. Without it, scanner falls back to HTML-only checks.
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
@@ -205,7 +233,7 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 7. Broken links: 404/500 = FAIL, 403 (bot-blocked) = WARN
 8. Every error includes the exact page URL where it was found
 9. Results are collected, scored (100 - weighted failures), and formatted
-10. HTML report + JSON audit trail saved to `reports/`
+10. Scan saved to PostgreSQL (primary) and filesystem (fallback)
 11. Human review checklist allows Pass/Fail/N/A with comments; FAIL decisions lower the score in real-time
 
 ## Report Layout
@@ -221,14 +249,6 @@ The report body has four visually distinct sections:
 
 No SKIP status exists in the report. Checks that can't run automatically are flagged as HUMAN_REVIEW with actionable instructions telling the reviewer what to verify manually.
 
-## Viewing Old Reports
-
-All scan reports are permanently saved to the `reports/` directory as HTML + JSON file pairs. There are three ways to access past reports:
-
-1. **History page** (`/history`) — Searchable, filterable table of all scans. Filter by site URL, partner, phase, or score range. Click any row to view the full report. Download the JSON audit trail directly.
-2. **Direct URL** (`/reports/<filename>`) — Each report has a permanent URL. Share the link and anyone with access to the app can view it in their browser.
-3. **Print to PDF** — Every report has a "Print / Save PDF" button in its toolbar. The print stylesheet preserves all colors, badges, and formatting for a professional PDF export.
-
 ## Wrike Integration (Theoretical - Future Target)
 
 The `/webhook/wrike` endpoint in app.py is built and ready but untested (no Wrike access during hackathon). Design:
@@ -243,38 +263,7 @@ Note: PDF generation requires adding WeasyPrint or a similar library in producti
 ## Hackathon Deliverables
 
 1. **Working prototype** - Flask web app with 41 check functions across 55 rules, grammar/spelling, broken images, social sharing, mixed content, real scan results
-2. **Professional proposal** - `proposal.html` (17-slide deck, print to PDF via browser)
+2. **Professional proposal** - `proposal.html` (17-slide deck with embedded screenshots, print to PDF via browser)
 3. **Demo results** - Scans of both provided test sites with real scores
-4. **Cloud-ready** - Dockerfile + Render.com config for instant deployment
+4. **Cloud-ready** - Dockerfile + Render.com config with PostgreSQL for persistent storage
 5. **QA self-service** - Rules editor and scan history accessible via web app
-
-## Deploying to the Cloud (Step by Step)
-
-### Using Render.com (free tier):
-
-1. **Create a GitHub repository**
-   - Go to github.com, click "New repository"
-   - Name it `zero-touch-qa`, set to Private
-   - Follow the instructions to push local code:
-     ```
-     git init
-     git add -A
-     git commit -m "Initial commit"
-     git remote add origin https://github.com/YOUR_USERNAME/zero-touch-qa.git
-     git push -u origin main
-     ```
-
-2. **Connect to Render.com**
-   - Go to render.com and sign up (free)
-   - Click "New" > "Web Service"
-   - Connect your GitHub account, select the `zero-touch-qa` repo
-   - Render reads the `render.yaml` file and configures everything automatically
-
-3. **Set environment variables** in Render dashboard:
-   - `PSI_API_KEY` (optional - from Google Cloud Console)
-   - `WRIKE_API_TOKEN` (when Wrike access is available)
-
-4. **Access the app** at the URL Render provides (e.g., `https://zero-touch-qa.onrender.com`)
-
-### Note on `.env` file
-The `.env` file is for local development only. In cloud deployment, environment variables are set through the hosting provider's dashboard (Render, Heroku, etc.) — they are never committed to the repository.

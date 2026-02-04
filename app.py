@@ -19,6 +19,8 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
 from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
+from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
+    db_load_scan_history, db_get_report, db_seed_from_filesystem
 
 load_dotenv()  # Loads .env file automatically
 
@@ -50,13 +52,17 @@ WRIKE_CUSTOM_FIELD_SITE_URL = os.environ.get("WRIKE_CF_SITE_URL", "")     # cust
 WRIKE_CUSTOM_FIELD_PARTNER = os.environ.get("WRIKE_CF_PARTNER", "")       # custom field ID for partner
 WRIKE_CUSTOM_FIELD_PHASE = os.environ.get("WRIKE_CF_PHASE", "")           # custom field ID for phase
 
-# Store scan history in memory (would be a database in production)
+# Store scan history in memory (backed by PostgreSQL when DATABASE_URL is set)
 scan_history = []
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 _SCAN_COUNTER_FILE = os.path.join(REPORTS_DIR, "scan_counter.json")
+
+# Initialize database (creates tables if needed, no-op if no DATABASE_URL)
+init_db()
+db_seed_from_filesystem(REPORTS_DIR)
 
 
 def _get_scan_id(site_url: str, phase: str) -> str:
@@ -65,6 +71,15 @@ def _get_scan_id(site_url: str, phase: str) -> str:
     Re-scanning the same site at the same build phase reuses the existing ID.
     A new site or new phase gets the next available ID.
     """
+    # Try database first
+    try:
+        scan_id = db_get_scan_id(site_url, phase)
+        if scan_id is not None:
+            return scan_id
+    except Exception as e:
+        print(f"[DB] Error getting scan ID, falling back to filesystem: {e}")
+
+    # Fallback: filesystem
     try:
         with open(_SCAN_COUNTER_FILE, "r") as f:
             data = json.load(f)
@@ -413,6 +428,21 @@ def home():
 
 @app.route("/reports/<path:filename>")
 def serve_report(filename):
+    # Try database first
+    try:
+        if filename.endswith(".json"):
+            html_name = filename.replace(".json", ".html")
+            content = db_get_report(html_name, "json")
+            if content is not None:
+                return app.response_class(content, mimetype="application/json")
+        else:
+            content = db_get_report(filename, "html")
+            if content is not None:
+                return app.response_class(content, mimetype="text/html")
+    except Exception as e:
+        print(f"[DB] Error serving report, falling back to filesystem: {e}")
+
+    # Fallback: filesystem
     return send_from_directory(REPORTS_DIR, filename)
 
 
@@ -421,12 +451,19 @@ def serve_report(filename):
 # ---------------------------------------------------------------------------
 
 def _load_scan_history():
-    """Rebuild scan history from JSON files in reports/ dir.
-
-    Rescans the directory each time so newly saved reports are always picked up.
-    Uses a set of known filenames to avoid duplicate parsing.
-    """
+    """Load scan history from database or filesystem."""
     global scan_history
+
+    # Try database first
+    try:
+        db_history = db_load_scan_history()
+        if db_history is not None:
+            scan_history = db_history
+            return
+    except Exception as e:
+        print(f"[DB] Error loading scan history, falling back to filesystem: {e}")
+
+    # Fallback: filesystem
     known_files = {s.get("_json_file") for s in scan_history if s.get("_json_file")}
     json_files = sorted(
         [f for f in os.listdir(REPORTS_DIR) if f.endswith(".json") and f != "scan_counter.json"],
@@ -1238,16 +1275,41 @@ def api_scan():
         report_path = os.path.join(REPORTS_DIR, report_filename)
 
         html_report = generate_html_report(report)
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write(html_report)
-
-        # Save JSON for audit
         json_filename = f"{safe_name}_{timestamp}.json"
-        json_path = os.path.join(REPORTS_DIR, json_filename)
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(generate_json_report(report), f, indent=2, default=str)
+        json_report_data = generate_json_report(report)
 
-        # Add to history
+        # Save to database (primary persistence)
+        scan_meta = {
+            "scan_id": report.scan_id,
+            "site_url": site_url,
+            "partner": partner,
+            "phase": phase,
+            "score": report.score,
+            "scan_time": report.scan_time,
+            "pages_scanned": report.pages_scanned,
+            "total_checks": report.total_checks,
+            "passed": report.passed,
+            "failed": report.failed,
+            "warnings": report.warnings,
+            "human_review": report.human_review,
+            "report_filename": report_filename,
+        }
+        try:
+            db_save_scan(scan_meta, html_report, json_report_data)
+        except Exception as e:
+            print(f"[DB] Error saving scan: {e}")
+
+        # Save to filesystem (fallback / local dev)
+        try:
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(html_report)
+            json_path = os.path.join(REPORTS_DIR, json_filename)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(json_report_data, f, indent=2, default=str)
+        except OSError as e:
+            print(f"[FS] Could not write report files: {e}")
+
+        # Add to in-memory history
         scan_history.append({
             "scan_id": report.scan_id,
             "site_url": site_url,
@@ -1350,8 +1412,28 @@ def _process_wrike_task(task_id: str):
         safe_name = site_url.replace("https://", "").replace("http://", "").replace("/", "_").replace(".", "-")
         report_filename = f"{safe_name}_{timestamp}.html"
         report_path = os.path.join(REPORTS_DIR, report_filename)
-        with open(report_path, "w", encoding="utf-8") as f:
-            f.write(generate_html_report(report))
+        html_report = generate_html_report(report)
+        json_report_data = generate_json_report(report)
+
+        # Save to database
+        try:
+            db_save_scan({
+                "scan_id": report.scan_id, "site_url": site_url,
+                "partner": partner, "phase": phase, "score": report.score,
+                "scan_time": report.scan_time, "pages_scanned": report.pages_scanned,
+                "total_checks": report.total_checks, "passed": report.passed,
+                "failed": report.failed, "warnings": report.warnings,
+                "human_review": report.human_review, "report_filename": report_filename,
+            }, html_report, json_report_data)
+        except Exception as e:
+            print(f"[DB] Error saving Wrike scan: {e}")
+
+        # Save to filesystem
+        try:
+            with open(report_path, "w", encoding="utf-8") as f:
+                f.write(html_report)
+        except OSError as e:
+            print(f"[FS] Could not write report file: {e}")
 
         # Post comment to Wrike
         comment = generate_wrike_comment(report)

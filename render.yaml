@@ -6,6 +6,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zero-touch-qa-db
+          property: connectionString
       - key: PSI_API_KEY
         sync: false
       - key: WRIKE_API_TOKEN
@@ -16,3 +20,9 @@ services:
         sync: false
       - key: WRIKE_CF_PHASE
         sync: false
+
+databases:
+  - name: zero-touch-qa-db
+    plan: free
+    databaseName: zero_touch_qa
+    user: ztqa_user
