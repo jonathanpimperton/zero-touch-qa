@@ -421,20 +421,27 @@ def serve_report(filename):
 # ---------------------------------------------------------------------------
 
 def _load_scan_history():
-    """Load scan history from JSON files in reports/ dir if in-memory list is empty."""
+    """Rebuild scan history from JSON files in reports/ dir.
+
+    Rescans the directory each time so newly saved reports are always picked up.
+    Uses a set of known filenames to avoid duplicate parsing.
+    """
     global scan_history
-    if scan_history:
-        return
+    known_files = {s.get("_json_file") for s in scan_history if s.get("_json_file")}
     json_files = sorted(
         [f for f in os.listdir(REPORTS_DIR) if f.endswith(".json") and f != "scan_counter.json"],
         key=lambda x: os.path.getmtime(os.path.join(REPORTS_DIR, x)),
     )
     for jf in json_files:
+        if jf in known_files:
+            continue
         try:
             with open(os.path.join(REPORTS_DIR, jf), "r") as f:
                 data = json.load(f)
             meta = data.get("metadata", {})
             summary = data.get("summary", {})
+            if not meta.get("site_url"):
+                continue
             html_file = jf.replace(".json", ".html")
             scan_history.append({
                 "scan_id": meta.get("scan_id", ""),
@@ -444,6 +451,7 @@ def _load_scan_history():
                 "score": summary.get("score", 0),
                 "scan_time": meta.get("scan_time", ""),
                 "report_file": html_file,
+                "_json_file": jf,
             })
         except Exception:
             continue
