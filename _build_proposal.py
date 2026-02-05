@@ -95,7 +95,7 @@ def main():
                 <div class="flow-arrow">↓</div>
                 <div class="flow-box">Report generated</div>
                 <div class="flow-arrow">↓</div>
-                <div class="flow-box" style="font-size: 10px; padding: 6px 10px;">If score ≥95: auto-advance<br/>If &lt;95: human reviews flagged items only</div>
+                <div class="flow-box" style="font-size: 10px; padding: 6px 10px;">If 0 failures: Ready for Delivery<br/>If failures: human reviews flagged items</div>
                 <div class="flow-arrow">↓</div>
                 <div class="flow-box">Final sign-off</div>
             </div>

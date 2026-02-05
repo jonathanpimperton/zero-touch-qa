@@ -242,12 +242,44 @@ Each HTML report includes a **toolbar** at the top (hidden when printing) with n
 
 The report body has four visually distinct sections:
 
-1. **Failures** (red cards) — Action required. Details formatted as bullet lists for easy scanning.
-2. **Warnings** (yellow cards) — Review recommended. Same bullet-list format.
+1. **Failures** (red cards) — Each card shows:
+   - **Headline**: Short summary of what's wrong (e.g., "Social links found outside footer (2 pages)")
+   - **Fix advice**: Green box with specific guidance on how to fix the issue
+   - **Rule reference**: Rule ID and description in smaller text
+   - **Details**: Collapsible list of specific instances (hidden by default, click "Show details" to expand)
+2. **Warnings** (yellow cards) — Same format as failures, but for non-blocking issues.
 3. **Human Review Checklist** (indigo cards) — Interactive Pass/Fail/N/A buttons with comments. Human FAIL subtracts the item's weight from the score and updates the score ring in real-time. Rule IDs shown for traceability.
 4. **All Results by Category** — Separated by a horizontal divider with "FULL BREAKDOWN" label, grey background panel, and italic note: "Items flagged above are repeated here for reference." This is the complete reference view of every automated check organised by category. Human review items are excluded here (they only appear in the checklist above to avoid duplication).
 
 No SKIP status exists in the report. Checks that can't run automatically are flagged as HUMAN_REVIEW with actionable instructions telling the reviewer what to verify manually.
+
+## Scoring System
+
+The scoring system ensures honest assessments:
+
+- **Score calculation**: 100 - sum(weight) for each FAIL. Warnings don't lose points.
+- **Weights**: 1 (minor) to 5 (critical). Total possible penalty: 83 points from automated checks.
+- **"Ready for Delivery" requires**: Score 95+ AND zero failures. Any failure blocks this status.
+- **Critical failures (weight 5)**: Broken links, social links in wrong place, meta titles/descriptions missing. These show "Critical Issues - Fix Before Delivery" even with high scores.
+
+| Score | Failures | Assessment |
+|-------|----------|------------|
+| 95+ | 0 | Ready for Delivery |
+| 95+ | Any | Critical/Minor Issues - Fix Before Delivery |
+| 85-94 | Any | Minor Issues - Fix Before Delivery |
+| 85-94 | 0 | Almost Ready - Review Warnings |
+| 70-84 | Any | Needs Work - Several Issues |
+| <70 | Any | Significant Issues - Major Rework |
+
+## Web UI Polish
+
+The web interface features:
+- **Consistent headers** across all pages with PetDesk branding and subtle glow effects
+- **Animated transitions**: Fade-in on page load, smooth hover states
+- **Form icons**: SVG icons next to URL, Partner, and Phase fields
+- **Step-by-step scanning progress**: Shows current phase with emojis (🔗 Connecting → 🕷️ Crawling → ✓ Checking → 📝 Grammar → 📊 Report)
+- **Score rings**: Circular colored badges in history (green/yellow/red based on score)
+- **Scan ID badges**: Monospace font with gradient background for easy identification
 
 ## Wrike Integration (Theoretical - Future Target)
 
