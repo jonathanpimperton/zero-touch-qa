@@ -468,8 +468,8 @@ def main():
                     <p style="line-height: 1.5;">Auto-trigger scans when Wrike tasks move to QA, attach PDF reports to the task</p>
                 </div>
                 <div class="card" style="margin-bottom: 10px; font-size: 12px;">
-                    <h3 style="font-size: 13px;">Database Storage</h3>
-                    <p style="line-height: 1.5;">Currently uses JSON files for scan history. Migrate to PostgreSQL for long-term trending, search, and analytics across all scans.</p>
+                    <h3 style="font-size: 13px;">Analytics Dashboard</h3>
+                    <p style="line-height: 1.5;">Build trending reports and aggregate analytics from the PostgreSQL scan history &mdash; track QA pass rates over time, common failure patterns, partner comparisons.</p>
                 </div>
                 <div class="card" style="font-size: 12px;">
                     <h3 style="font-size: 13px;">More Partner Templates</h3>
