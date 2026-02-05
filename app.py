@@ -228,7 +228,7 @@ HOME_PAGE = """<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
-               background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); color: #111827; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+               background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); color: #111827; min-height: 100vh; -webkit-font-smoothing: antialiased; overflow-y: scroll; }
 
         /* Fade in animation */
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -248,7 +248,7 @@ HOME_PAGE = """<!DOCTYPE html>
             content: ''; position: absolute; top: -80%; right: -20%; width: 500px; height: 500px;
             background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%); border-radius: 50%;
         }
-        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
+        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; width: 100%; }
         .header-left { display: flex; align-items: center; gap: 18px; }
         .header-logo { height: 34px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
         .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
@@ -626,7 +626,7 @@ RULES_PAGE = """<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; }
+               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; overflow-y: scroll; }
         .header {
             {% if bg_purple_uri %}background: url('{{ bg_purple_uri }}') center/cover no-repeat;{% else %}background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4f46e5 70%, #6366f1 100%);{% endif %}
             color: white; padding: 32px 40px; position: relative; overflow: hidden;
@@ -636,7 +636,7 @@ RULES_PAGE = """<!DOCTYPE html>
             background: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.1) 0%, transparent 50%); }
         .header::after { content: ''; position: absolute; top: -80%; right: -20%; width: 500px; height: 500px;
             background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%); border-radius: 50%; }
-        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
+        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; width: 100%; }
         .header-left { display: flex; align-items: center; gap: 18px; }
         .header-logo { height: 34px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
         .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
@@ -770,7 +770,7 @@ HISTORY_PAGE = """<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; }
+               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; overflow-y: scroll; }
         .header {
             {% if bg_purple_uri %}background: url('{{ bg_purple_uri }}') center/cover no-repeat;{% else %}background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4f46e5 70%, #6366f1 100%);{% endif %}
             color: white; padding: 32px 40px; position: relative; overflow: hidden;
@@ -780,7 +780,7 @@ HISTORY_PAGE = """<!DOCTYPE html>
             background: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.1) 0%, transparent 50%); }
         .header::after { content: ''; position: absolute; top: -80%; right: -20%; width: 500px; height: 500px;
             background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%); border-radius: 50%; }
-        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
+        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; width: 100%; }
         .header-left { display: flex; align-items: center; gap: 18px; }
         .header-logo { height: 34px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
         .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
@@ -1080,7 +1080,7 @@ RULES_EDIT_PAGE = """<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; }
+               background: #f9fafb; color: #111827; -webkit-font-smoothing: antialiased; overflow-y: scroll; }
         .header {
             {% if bg_purple_uri %}background: url('{{ bg_purple_uri }}') center/cover no-repeat;{% else %}background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4f46e5 70%, #6366f1 100%);{% endif %}
             color: white; padding: 32px 40px; position: relative; overflow: hidden;
@@ -1090,7 +1090,7 @@ RULES_EDIT_PAGE = """<!DOCTYPE html>
             background: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.1) 0%, transparent 50%); }
         .header::after { content: ''; position: absolute; top: -80%; right: -20%; width: 500px; height: 500px;
             background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%); border-radius: 50%; }
-        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
+        .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; width: 100%; }
         .header-left { display: flex; align-items: center; gap: 18px; }
         .header-logo { height: 34px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
         .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
