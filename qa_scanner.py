@@ -909,11 +909,14 @@ def check_social_links_footer_only(pages: dict, rule: dict) -> list[CheckResult]
     results = []
     social_domains = ["facebook.com", "instagram.com", "twitter.com", "x.com",
                       "youtube.com", "linkedin.com", "tiktok.com"]
-    violations = []
+    violations = set()  # Use set to deduplicate
 
     for url, page in pages.items():
         if not page.soup:
             continue
+
+        # Normalize URL (strip trailing slash for deduplication)
+        normalized_url = url.rstrip("/")
 
         # Check header/nav for social links
         header = page.soup.find("header") or page.soup.find("nav")
@@ -922,14 +925,15 @@ def check_social_links_footer_only(pages: dict, rule: dict) -> list[CheckResult]
                 href = a["href"].lower()
                 for sd in social_domains:
                     if sd in href:
-                        violations.append((sd, url))
+                        violations.add((sd, normalized_url))
 
     if violations:
-        detail = "; ".join(f"{sd} found in header/nav on {u}" for sd, u in violations[:3])
+        sorted_violations = sorted(violations)
+        detail_lines = [f"{sd} found in header/nav on {u}" for sd, u in sorted_violations]
         results.append(CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="FAIL", weight=rule["weight"],
-            details=f"Social links found outside footer: {detail}",
+            details=f"Social links found outside footer ({len(violations)} pages)\n" + "\n".join(detail_lines),
             points_lost=rule["weight"],
         ))
     else:
