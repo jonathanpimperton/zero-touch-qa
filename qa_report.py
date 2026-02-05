@@ -126,16 +126,23 @@ def generate_html_report(report) -> str:
     human_review = sum(1 for r in report.results if r.status == "HUMAN_REVIEW")
     skipped = sum(1 for r in report.results if r.status == "SKIP")
 
+    # Check for critical failures (weight >= 5) - these block "Ready for Delivery"
+    critical_failures = [r for r in report.results if r.status == "FAIL" and r.weight >= 5]
+    has_critical = len(critical_failures) > 0
+
     # Score color & assessment
-    if report.score >= 95:
+    # Rule: Any critical failure (weight 5) blocks "Ready for Delivery" regardless of score
+    if report.score >= 95 and not has_critical:
         score_color = "#16a34a"
         score_bg = "#dcfce7"
         assessment = "Ready for Delivery"
         ring_color = "#22c55e"
-    elif report.score >= 85:
+    elif report.score >= 85 or (report.score >= 95 and has_critical):
         score_color = "#65a30d"
         score_bg = "#ecfccb"
         assessment = "Minor Issues - Fix Before Delivery"
+        if has_critical:
+            assessment = "Critical Issue - Fix Before Delivery"
         ring_color = "#84cc16"
     elif report.score >= 70:
         score_color = "#d97706"
