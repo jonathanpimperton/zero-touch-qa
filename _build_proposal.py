@@ -34,7 +34,8 @@ def main():
             <img src="{logo_white_uri or logo_uri}" alt="PetDesk Logo" />
         </div>
         <h1 style="font-size: 44px; color: #fff; margin-bottom: 16px;">Zero-Touch QA</h1>
-        <p style="font-size: 22px; color: #DDEE91; font-weight: 600; margin-bottom: 40px;">Automated Website Quality at Scale</p>
+        <p style="font-size: 22px; color: #DDEE91; font-weight: 600; margin-bottom: 24px;">Automated Website Quality at Scale</p>
+        <p style="font-size: 16px; color: rgba(255,255,255,0.9); margin-bottom: 8px;">Jonathan Pimperton</p>
         <p style="font-size: 14px; color: rgba(255,255,255,0.6);">Hackathon Submission — Automation & AI Track</p>
         <div class="slide-num">1</div>
     </div>
