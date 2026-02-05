@@ -1004,29 +1004,85 @@ def _esc(text: str) -> str:
 
 
 def _get_issue_headline(details: str, rule_check: str) -> str:
-    """Extract a clear headline from details, or derive one from the rule.
+    """Extract a SHORT headline from details, or derive one from the rule.
 
-    The headline should say what's WRONG, not what the rule checks for.
-    E.g., "6 images missing alt text" instead of "All images have alt text".
+    The headline should be a brief summary of what's wrong, not all instances.
+    E.g., "Social links found outside footer" (not the full list of pages).
+    E.g., "6 images missing alt text" (count + issue type).
     """
     if not details:
-        # Negate the rule description for a failure headline
         return f"Issue: {rule_check}"
 
-    # Details often start with a summary line like "6 images missing alt text"
     first_line = details.split("\n")[0].strip()
-    if first_line:
-        return first_line
-    return f"Issue: {rule_check}"
+    if not first_line:
+        return f"Issue: {rule_check}"
+
+    # If first line contains ":" with specifics after it, take only the part before
+    # E.g., "Social links found outside footer: facebook.com found in..." -> "Social links found outside footer"
+    if ": " in first_line:
+        # Check if the part after ":" looks like instance details (contains URLs or "found")
+        before_colon, after_colon = first_line.split(": ", 1)
+        if any(indicator in after_colon.lower() for indicator in ["http", "found", "on page", ".com", ".org"]):
+            return before_colon
+
+    # If first line contains ";" it's likely multiple instances concatenated
+    # Take just up to the first ";"
+    if "; " in first_line:
+        first_part = first_line.split("; ")[0]
+        # Count how many instances there are
+        instance_count = first_line.count("; ") + 1
+        if instance_count > 1:
+            # Try to extract the issue type from the first instance
+            if ": " in first_part:
+                issue_type = first_part.split(": ", 1)[0]
+                return f"{issue_type} ({instance_count} instances)"
+            return f"{first_part.split(' on ')[0] if ' on ' in first_part else first_part} ({instance_count} instances)"
+
+    # If the line is very long (>80 chars), truncate it
+    if len(first_line) > 80:
+        # Try to find a natural break point
+        if ": " in first_line[:80]:
+            return first_line.split(": ", 1)[0]
+        if " on " in first_line[:80]:
+            return first_line.split(" on ", 1)[0]
+        return first_line[:77] + "..."
+
+    return first_line
 
 
 def _get_issue_details_body(details: str) -> str:
-    """Get the details body (everything after the first summary line)."""
-    if not details or "\n" not in details:
+    """Get the details body - all specific instances/items.
+
+    If details has multiple lines, return everything.
+    If details is a single line with ";" separated items, split them into lines.
+    If details has ": " with instances after it, extract those instances.
+    """
+    if not details:
         return ""
-    lines = details.split("\n", 1)
-    if len(lines) > 1:
-        return lines[1].strip()
+
+    # If there are multiple lines, return all lines (they're already the details)
+    if "\n" in details:
+        return details.strip()
+
+    # Single line - check if it has concatenated instances
+    line = details.strip()
+
+    # If it has ": " followed by instances, extract the instances part
+    if ": " in line:
+        before, after = line.split(": ", 1)
+        # Check if "after" looks like instance details
+        if any(indicator in after.lower() for indicator in ["http", "found", "on page", ".com", ".org", "; "]):
+            line = after
+
+    # Split on "; " to create separate lines for each instance
+    if "; " in line:
+        items = line.split("; ")
+        return "\n".join(items)
+
+    # If it's a single item but contains useful detail, return it
+    if any(indicator in line.lower() for indicator in ["http", "found", "on page"]):
+        return line
+
     return ""
 
 
@@ -1034,7 +1090,7 @@ _details_collapse_counter = 0
 
 
 def _format_details_body(text: str) -> str:
-    """Format the details body (items only, no summary) into a collapsible list."""
+    """Format the details body into a COLLAPSED list. All details hidden by default."""
     global _details_collapse_counter
     if not text:
         return ""
@@ -1042,28 +1098,20 @@ def _format_details_body(text: str) -> str:
     lines = [line.strip() for line in escaped.split("\n") if line.strip()]
     if not lines:
         return ""
-    if len(lines) == 1:
-        return f"<p>{lines[0]}</p>"
 
-    max_visible = 5
-    if len(lines) <= max_visible:
-        item_html = "".join(f"<li>{line}</li>" for line in lines)
-        return f'<ul class="detail-list">{item_html}</ul>'
-
-    # Collapsible
     _details_collapse_counter += 1
     cid = f"details-collapse-{_details_collapse_counter}"
-    visible_html = "".join(f"<li>{line}</li>" for line in lines[:max_visible])
-    hidden_html = "".join(f"<li>{line}</li>" for line in lines[max_visible:])
-    remaining = len(lines) - max_visible
+    count = len(lines)
+    item_html = "".join(f"<li>{line}</li>" for line in lines)
+
+    # All details collapsed by default with "Show details" button
     return (
-        f'<ul class="detail-list">{visible_html}'
-        f'<div id="{cid}" class="collapse-content" style="display:none;">{hidden_html}</div>'
-        f'</ul>'
+        f'<div id="{cid}" class="collapse-content" style="display:none;">'
+        f'<ul class="detail-list">{item_html}</ul></div>'
         f'<button class="collapse-toggle" onclick="var el=document.getElementById(\'{cid}\');'
         f'if(el.style.display===\'none\'){{el.style.display=\'block\';this.textContent=\'Hide details\'}}'
-        f'else{{el.style.display=\'none\';this.textContent=\'Show {remaining} more items\'}}">'
-        f'Show {remaining} more items</button>'
+        f'else{{el.style.display=\'none\';this.textContent=\'Show details ({count} item{\"s\" if count != 1 else \"\"})\'}}">'
+        f'Show details ({count} item{"s" if count != 1 else ""})</button>'
     )
 
 
