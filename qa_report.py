@@ -133,17 +133,22 @@ def generate_html_report(report) -> str:
 
     # Score color & assessment
     # Rule: "Ready for Delivery" only if score 95+ AND zero failures
+    # Rule: Critical failures (weight 5) always show amber, never green
     if report.score >= 95 and not has_failures:
         score_color = "#16a34a"
         score_bg = "#dcfce7"
         assessment = "Ready for Delivery"
         ring_color = "#22c55e"
+    elif has_critical:
+        # Critical failures always amber regardless of score
+        score_color = "#d97706"
+        score_bg = "#fef3c7"
+        assessment = "Critical Issues - Fix Before Delivery"
+        ring_color = "#f59e0b"
     elif report.score >= 85:
         score_color = "#65a30d"
         score_bg = "#ecfccb"
-        if has_critical:
-            assessment = "Critical Issues - Fix Before Delivery"
-        elif has_failures:
+        if has_failures:
             assessment = "Minor Issues - Fix Before Delivery"
         else:
             assessment = "Almost Ready - Review Warnings"

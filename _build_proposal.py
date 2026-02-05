@@ -263,6 +263,7 @@ def main():
                         <li>Click <strong>Run QA Scan</strong></li>
                         <li>View and share the HTML report</li>
                     </ol>
+                    <p style="font-size: 11px; margin-top: 10px; margin-bottom: 0;"><strong>Try it now:</strong> <a href="https://zero-touch-qa.onrender.com" style="color: #22c55e;">zero-touch-qa.onrender.com</a></p>
                 </div>
                 <div class="interaction-card" style="border: 2px solid #9ca3af; position: relative;">
                     <div class="tag" style="background: #9ca3af;">FUTURE</div>

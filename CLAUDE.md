@@ -262,14 +262,16 @@ The scoring system ensures honest assessments:
 - **"Ready for Delivery" requires**: Score 95+ AND zero failures. Any failure blocks this status.
 - **Critical failures (weight 5)**: Broken links, social links in wrong place, meta titles/descriptions missing. These show "Critical Issues - Fix Before Delivery" even with high scores.
 
-| Score | Failures | Assessment |
-|-------|----------|------------|
-| 95+ | 0 | Ready for Delivery |
-| 95+ | Any | Critical/Minor Issues - Fix Before Delivery |
-| 85-94 | Any | Minor Issues - Fix Before Delivery |
-| 85-94 | 0 | Almost Ready - Review Warnings |
-| 70-84 | Any | Needs Work - Several Issues |
-| <70 | Any | Significant Issues - Major Rework |
+| Score | Failures | Color | Assessment |
+|-------|----------|-------|------------|
+| 95+ | 0 | Green | Ready for Delivery |
+| Any | Critical (weight 5) | Amber | Critical Issues - Fix Before Delivery |
+| 85+ | Minor only | Lime | Minor Issues - Fix Before Delivery |
+| 85+ | 0 (warnings only) | Lime | Almost Ready - Review Warnings |
+| 70-84 | Any | Amber | Needs Work - Several Issues |
+| <70 | Any | Red | Significant Issues - Major Rework |
+
+**Key rule**: Critical failures (weight 5) always show amber and block green status, regardless of score.
 
 ## Web UI Polish
 
