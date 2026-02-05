@@ -228,83 +228,131 @@ HOME_PAGE = """<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
-               background: #f9fafb; color: #111827; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+               background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); color: #111827; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+        /* Fade in animation */
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeInUp 0.4s ease-out forwards; }
+        .fade-in-delay { animation: fadeInUp 0.4s ease-out 0.1s forwards; opacity: 0; }
 
         .header {
-            {% if bg_purple_uri %}background: url('{{ bg_purple_uri }}') center/cover no-repeat;{% else %}background: linear-gradient(135deg, #312e81, #4f46e5, #6366f1);{% endif %}
-            color: white; padding: 28px 40px; position: relative; overflow: hidden;
+            {% if bg_purple_uri %}background: url('{{ bg_purple_uri }}') center/cover no-repeat;{% else %}background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4f46e5 70%, #6366f1 100%);{% endif %}
+            color: white; padding: 32px 40px; position: relative; overflow: hidden;
+            box-shadow: 0 4px 20px rgba(79,70,229,0.25);
+        }
+        .header::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.1) 0%, transparent 50%);
         }
         .header::after {
-            content: ''; position: absolute; top: -60%; right: -15%; width: 350px; height: 350px;
-            background: rgba(255,255,255,0.04); border-radius: 50%;
+            content: ''; position: absolute; top: -80%; right: -20%; width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%); border-radius: 50%;
         }
         .header-inner { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
-        .header-left { display: flex; align-items: center; gap: 16px; }
-        .header-logo { height: 32px; }
-        .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-        .header p { font-size: 13px; opacity: 0.75; margin-top: 2px; }
-        .header-badge {
-            background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px;
-            font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
-        }
-        .nav-links { display: flex; gap: 12px; }
-        .nav-links a { color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;
-            text-decoration: none; padding: 6px 14px; border-radius: 8px; }
-        .nav-links a:hover { background: rgba(255,255,255,0.15); color: #fff; }
+        .header-left { display: flex; align-items: center; gap: 18px; }
+        .header-logo { height: 34px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
+        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .header p { font-size: 13px; opacity: 0.8; margin-top: 3px; font-weight: 500; }
+        .nav-links { display: flex; gap: 8px; }
+        .nav-links a { color: rgba(255,255,255,0.85); font-size: 13px; font-weight: 600;
+            text-decoration: none; padding: 8px 16px; border-radius: 8px; transition: all 0.2s;
+            border: 1px solid transparent; }
+        .nav-links a:hover { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.2); }
 
-        .container { max-width: 720px; margin: 36px auto; padding: 0 24px; }
+        .container { max-width: 720px; margin: 40px auto; padding: 0 24px; }
 
         .card {
-            background: #fff; border-radius: 16px; padding: 32px 36px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            background: #fff; border-radius: 20px; padding: 36px 40px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 10px 20px -5px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid rgba(0,0,0,0.03);
+            position: relative; overflow: hidden;
         }
-        .card-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-        .card-subtitle { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+        .card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, #4f46e5, #6366f1, #818cf8);
+        }
+        .card-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #1e1b4b; }
+        .card-subtitle { font-size: 14px; color: #6b7280; margin-bottom: 24px; }
 
-        label { display: block; font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 6px; margin-top: 20px;
-                text-transform: uppercase; letter-spacing: 0.4px; }
-        label:first-of-type { margin-top: 0; }
+        .form-group { margin-top: 22px; }
+        .form-group:first-of-type { margin-top: 0; }
+        label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 8px;
+                text-transform: uppercase; letter-spacing: 0.5px; }
+        .label-icon { width: 16px; height: 16px; opacity: 0.6; }
         input[type=text], select {
-            width: 100%; padding: 11px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px;
-            font-size: 14px; transition: all 0.2s; background: #f9fafb; color: #111827;
+            width: 100%; padding: 13px 16px; border: 2px solid #e5e7eb; border-radius: 12px;
+            font-size: 15px; transition: all 0.2s ease; background: #fafafa; color: #111827;
         }
         input:focus, select:focus { outline: none; border-color: #6366f1; background: #fff;
-                                     box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+                                     box-shadow: 0 0 0 4px rgba(99,102,241,0.1); }
         input::placeholder { color: #9ca3af; }
+        select { cursor: pointer; }
 
         .btn {
             background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; border: none;
-            padding: 13px 28px; border-radius: 10px; font-size: 15px; font-weight: 600;
-            cursor: pointer; margin-top: 28px; width: 100%; transition: all 0.2s;
-            box-shadow: 0 1px 3px rgba(79,70,229,0.3);
+            padding: 15px 32px; border-radius: 12px; font-size: 16px; font-weight: 600;
+            cursor: pointer; margin-top: 32px; width: 100%; transition: all 0.25s ease;
+            box-shadow: 0 4px 14px rgba(79,70,229,0.35);
+            position: relative; overflow: hidden;
         }
-        .btn:hover { background: linear-gradient(135deg, #4338ca, #4f46e5); box-shadow: 0 4px 12px rgba(79,70,229,0.3); transform: translateY(-1px); }
-        .btn:disabled { background: #a5b4fc; cursor: not-allowed; box-shadow: none; transform: none; }
+        .btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        .btn:hover::before { left: 100%; }
+        .btn:hover { background: linear-gradient(135deg, #4338ca, #4f46e5); box-shadow: 0 6px 20px rgba(79,70,229,0.4); transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { background: linear-gradient(135deg, #a5b4fc, #c7d2fe); cursor: not-allowed; box-shadow: none; transform: none; }
 
-        .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid rgba(255,255,255,0.3);
-                   border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3);
+                   border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 10px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .status { text-align: center; padding: 18px; font-size: 14px; color: #6b7280; margin-top: 18px;
-                  background: #f9fafb; border-radius: 10px; }
+        .status { text-align: center; padding: 20px 24px; font-size: 14px; color: #4b5563; margin-top: 20px;
+                  background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 12px; border: 1px solid #e5e7eb;
+                  line-height: 1.6; }
+        .status-steps { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+        .status-step { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+        .status-step.active { background: #eef2ff; color: #4338ca; font-weight: 600; }
+        .status-step.done { color: #16a34a; }
+        .status-step .step-icon { width: 20px; text-align: center; }
 
-        .history { margin-top: 36px; }
-        .history-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; color: #374151; }
+        .history { margin-top: 40px; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .history-title { font-size: 16px; font-weight: 700; color: #1e1b4b; }
+        .history-count { font-size: 12px; color: #9ca3af; background: #f1f5f9; padding: 4px 10px; border-radius: 12px; }
         .history-item {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 14px 18px; background: #fff; border-radius: 12px; margin-bottom: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: box-shadow 0.2s;
+            padding: 16px 20px; background: #fff; border-radius: 14px; margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.02);
+            transition: all 0.2s ease; border: 1px solid transparent;
         }
-        .history-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .history-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); border-color: #e5e7eb; }
+        .history-left { display: flex; align-items: center; gap: 14px; }
+        .scan-id-badge { background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #4338ca; font-size: 11px; font-weight: 700;
+                         padding: 6px 10px; border-radius: 8px; font-family: 'SF Mono', Monaco, monospace; letter-spacing: 0.3px; }
         .history-site { font-size: 14px; font-weight: 600; color: #111827; }
-        .history-meta { font-size: 12px; color: #9ca3af; margin-top: 2px; }
-        .score-badge { font-weight: 800; font-size: 16px; }
+        .history-meta { font-size: 12px; color: #9ca3af; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+        .meta-dot { width: 3px; height: 3px; background: #d1d5db; border-radius: 50%; }
+        .score-badge { font-weight: 800; font-size: 18px; min-width: 65px; text-align: center; }
         .score-good { color: #16a34a; } .score-ok { color: #d97706; } .score-bad { color: #dc2626; }
-        a { color: #4f46e5; text-decoration: none; font-weight: 600; font-size: 13px; }
-        a:hover { text-decoration: underline; }
-        .empty-history { text-align: center; padding: 28px; color: #9ca3af; font-size: 13px;
-                         background: #fff; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-        .footer { text-align: center; padding: 24px 0; font-size: 12px; color: #d1d5db; }
+        .score-ring { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                      font-weight: 800; font-size: 14px; flex-shrink: 0; }
+        .score-ring.good { background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #166534; border: 2px solid #86efac; }
+        .score-ring.ok { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border: 2px solid #fcd34d; }
+        .score-ring.bad { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; border: 2px solid #fca5a5; }
+        a { color: #4f46e5; text-decoration: none; font-weight: 600; font-size: 13px; transition: color 0.2s; }
+        a:hover { color: #4338ca; }
+        .view-link { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px;
+                     background: #f8fafc; border: 1px solid #e5e7eb; transition: all 0.2s; }
+        .view-link:hover { background: #eef2ff; border-color: #c7d2fe; }
+        .empty-history { text-align: center; padding: 40px 28px; color: #6b7280; font-size: 14px;
+                         background: linear-gradient(135deg, #fff, #f8fafc); border-radius: 16px;
+                         box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 2px dashed #e5e7eb; }
+        .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
+        .footer { text-align: center; padding: 32px 0; font-size: 12px; color: #9ca3af; }
+        .footer-inner { display: flex; align-items: center; justify-content: center; gap: 8px; }
     </style>
 </head>
 <body>
@@ -318,6 +366,7 @@ HOME_PAGE = """<!DOCTYPE html>
                 </div>
             </div>
             <div class="nav-links">
+                <a href="/">Scanner</a>
                 <a href="/rules">View Rules</a>
                 <a href="/rules/edit">Edit Rules</a>
                 <a href="/history">History</a>
@@ -326,59 +375,99 @@ HOME_PAGE = """<!DOCTYPE html>
     </div>
 
     <div class="container">
-        <div class="card">
+        <div class="card fade-in">
             <div class="card-title">Run a QA Scan</div>
             <div class="card-subtitle">Enter a WP Engine staging URL to scan against the QA checklist</div>
             <form id="scanForm">
-                <label for="site_url">Website URL</label>
-                <input type="text" id="site_url" name="site_url" placeholder="e.g. clinic-name.wpenginepowered.com" required>
+                <div class="form-group">
+                    <label for="site_url">
+                        <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        Website URL
+                    </label>
+                    <input type="text" id="site_url" name="site_url" placeholder="e.g. clinic-name.wpenginepowered.com" required>
+                </div>
 
-                <label for="partner">Partner</label>
-                <select id="partner" name="partner">
-                    <option value="independent">Independent</option>
-                    <option value="western">Western Veterinary Partners</option>
-                    <option value="heartland">Heartland</option>
-                    <option value="united">United</option>
-                    <option value="rarebreed">Rarebreed</option>
-                    <option value="evervet">EverVet</option>
-                    <option value="encore">Encore</option>
-                    <option value="amerivet">AmeriVet</option>
-                </select>
+                <div class="form-group">
+                    <label for="partner">
+                        <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Partner
+                    </label>
+                    <select id="partner" name="partner">
+                        <option value="independent">Independent</option>
+                        <option value="western">Western Veterinary Partners</option>
+                        <option value="heartland">Heartland</option>
+                        <option value="united">United</option>
+                        <option value="rarebreed">Rarebreed</option>
+                        <option value="evervet">EverVet</option>
+                        <option value="encore">Encore</option>
+                        <option value="amerivet">AmeriVet</option>
+                    </select>
+                </div>
 
-                <label for="phase">Build Phase</label>
-                <select id="phase" name="phase">
-                    <option value="prototype">Prototype</option>
-                    <option value="full" selected>Full Build</option>
-                    <option value="final">Final</option>
-                </select>
+                <div class="form-group">
+                    <label for="phase">
+                        <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        Build Phase
+                    </label>
+                    <select id="phase" name="phase">
+                        <option value="prototype">Prototype</option>
+                        <option value="full" selected>Full Build</option>
+                        <option value="final">Final</option>
+                    </select>
+                </div>
 
-                <button type="submit" class="btn" id="submitBtn">Run QA Scan</button>
+                <button type="submit" class="btn" id="submitBtn">
+                    <svg style="width:18px;height:18px;vertical-align:middle;margin-right:8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    Run QA Scan
+                </button>
             </form>
             <div class="status" id="status" style="display:none;"></div>
         </div>
 
-        <div class="history">
-            <div class="history-title">Recent Scans</div>
+        <div class="history fade-in-delay">
+            <div class="history-header">
+                <div class="history-title">Recent Scans</div>
+                {% if history %}<span class="history-count">{{ history | length }} scan{{ 's' if history | length != 1 else '' }}</span>{% endif %}
+            </div>
             <div id="historyList">
                 {% for scan in history %}
                 <div class="history-item">
-                    <div>
-                        <div class="history-site">{{ scan.site_url }}</div>
-                        <div class="history-meta">{{ scan.partner | title }} &bull; {{ scan.phase | title }} &bull; {{ scan.scan_time[:16] }}</div>
+                    <div class="history-left">
+                        {% if scan.scan_id %}<span class="scan-id-badge">{{ scan.scan_id }}</span>{% endif %}
+                        <div>
+                            <div class="history-site">{{ scan.site_url }}</div>
+                            <div class="history-meta">
+                                <span>{{ scan.partner | title }}</span>
+                                <span class="meta-dot"></span>
+                                <span>{{ scan.phase | title }}</span>
+                                <span class="meta-dot"></span>
+                                <span>{{ scan.scan_time[:10] }}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:14px;">
-                        <span class="score-badge {% if scan.score >= 85 %}score-good{% elif scan.score >= 70 %}score-ok{% else %}score-bad{% endif %}">{{ scan.score }}/100</span>
-                        <a href="/reports/{{ scan.report_file }}" target="_blank">View Report &rarr;</a>
+                    <div style="display:flex;align-items:center;gap:16px;">
+                        <div class="score-ring {% if scan.score >= 85 %}good{% elif scan.score >= 70 %}ok{% else %}bad{% endif %}">{{ scan.score }}</div>
+                        <a href="/reports/{{ scan.report_file }}" target="_blank" class="view-link">View &rarr;</a>
                     </div>
                 </div>
                 {% endfor %}
                 {% if not history %}
-                <div class="empty-history">No scans yet. Run your first scan above.</div>
+                <div class="empty-history">
+                    <div class="empty-icon">📋</div>
+                    <div>No scans yet</div>
+                    <div style="font-size:13px;margin-top:4px;color:#9ca3af;">Run your first scan above to see results here</div>
+                </div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="footer">Zero-Touch QA Scanner &bull; PetDesk</div>
+        <div class="footer">
+            <div class="footer-inner">
+                <span>Zero-Touch QA Scanner</span>
+                <span style="color:#e5e7eb;">•</span>
+                <span>PetDesk</span>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -390,7 +479,28 @@ HOME_PAGE = """<!DOCTYPE html>
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> Scanning...';
             status.style.display = 'block';
-            status.textContent = 'Crawling site and running QA checks... this may take a minute.';
+
+            // Animated step-by-step progress
+            const steps = [
+                { text: 'Connecting to site...', icon: '🔗' },
+                { text: 'Crawling pages...', icon: '🕷️' },
+                { text: 'Running QA checks...', icon: '✓' },
+                { text: 'Checking grammar & spelling...', icon: '📝' },
+                { text: 'Generating report...', icon: '📊' }
+            ];
+            let currentStep = 0;
+
+            function showStep() {
+                if (currentStep < steps.length) {
+                    const step = steps[currentStep];
+                    status.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;">' +
+                        '<span class="spinner" style="border-color:rgba(79,70,229,0.2);border-top-color:#4f46e5;width:22px;height:22px;"></span>' +
+                        '<span style="font-weight:600;color:#374151;">' + step.icon + ' ' + step.text + '</span></div>';
+                    currentStep++;
+                }
+            }
+            showStep();
+            const stepInterval = setInterval(showStep, 2500);
 
             try {
                 const resp = await fetch('/api/scan', {
@@ -402,18 +512,27 @@ HOME_PAGE = """<!DOCTYPE html>
                         phase: document.getElementById('phase').value,
                     })
                 });
+                clearInterval(stepInterval);
                 const data = await resp.json();
                 if (data.success) {
-                    status.innerHTML = 'Scan complete! Score: <strong>' + data.score + '/100</strong> &mdash; <a href="' + data.report_url + '" target="_blank">View Full Report &rarr;</a>';
-                    setTimeout(() => location.reload(), 2000);
+                    const scoreColor = data.score >= 85 ? '#16a34a' : data.score >= 70 ? '#d97706' : '#dc2626';
+                    status.innerHTML = '<div style="padding:8px 0;">' +
+                        '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:8px;">✅ Scan Complete!</div>' +
+                        '<div style="display:flex;align-items:center;justify-content:center;gap:16px;">' +
+                        '<span style="font-size:28px;font-weight:800;color:' + scoreColor + ';">' + data.score + '</span>' +
+                        '<span style="color:#9ca3af;font-size:14px;">/ 100</span>' +
+                        '<a href="' + data.report_url + '" target="_blank" class="view-link" style="margin-left:8px;">View Report &rarr;</a>' +
+                        '</div></div>';
+                    setTimeout(() => location.reload(), 2500);
                 } else {
-                    status.textContent = 'Error: ' + (data.error || 'Unknown error');
+                    status.innerHTML = '<div style="color:#dc2626;font-weight:600;">❌ Error: ' + (data.error || 'Unknown error') + '</div>';
                 }
             } catch(err) {
-                status.textContent = 'Error: ' + err.message;
+                clearInterval(stepInterval);
+                status.innerHTML = '<div style="color:#dc2626;font-weight:600;">❌ Error: ' + err.message + '</div>';
             }
             btn.disabled = false;
-            btn.innerHTML = 'Run QA Scan';
+            btn.innerHTML = '<svg style="width:18px;height:18px;vertical-align:middle;margin-right:8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Run QA Scan';
         });
     </script>
 </body>
