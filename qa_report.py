@@ -9,6 +9,83 @@ import os
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
+# Fix advice for common issues - shown below failure/warning headlines
+# ---------------------------------------------------------------------------
+FIX_ADVICE = {
+    # Search/Replace
+    "BSR-001": "Search for 'WhiskerFrame' in WordPress and replace with clinic name.",
+    "BSR-002": "Search for 'Whiskerframe' in WordPress and replace with clinic name.",
+    "BSR-003": "Update the address in the footer and contact page to the clinic's actual address.",
+    "BSR-004": "Update the city/state/zip in footer and contact sections.",
+    "BSR-005": "Replace placeholder phone with the clinic's actual phone number.",
+    "BSR-006": "Replace placeholder email with the clinic's actual email address.",
+    "BSR-007": "Replace placeholder email with the clinic's actual email address.",
+
+    # Functionality
+    "FUNC-001": "Check each broken link and either fix the URL or remove the link. 404 = page missing, 403 = blocked by server.",
+    "FUNC-002": "Wrap phone numbers in <a href='tel:+1XXXXXXXXXX'>...</a> tags.",
+    "FUNC-003": "Wrap email addresses in <a href='mailto:email@domain.com'>...</a> tags.",
+    "FUNC-004": "Create thank-you pages for each form and set them as the form redirect destination.",
+    "FUNC-005": "Check responsive breakpoints in Divi. Look for elements with fixed widths that cause horizontal scroll on mobile.",
+    "FUNC-006": "Optimize images, enable caching, and reduce JavaScript/CSS to improve Lighthouse score.",
+
+    # Craftsmanship
+    "CRAFT-001": "Wrap the logo image in an <a href='/'> link to the homepage.",
+    "CRAFT-002": "Upload a favicon.ico to the WordPress media library and set it in Appearance > Customize > Site Identity.",
+    "CRAFT-003": "Use WebAIM Contrast Checker to verify text/background combinations meet WCAG AA (4.5:1 ratio).",
+
+    # Content
+    "CONT-001": "Add a Privacy Policy link to the footer menu. Create the page if it doesn't exist.",
+    "CONT-002": "Add an Accessibility Statement link to the footer menu.",
+    "CONT-003": "Update footer 'Powered by' text to say 'PetDesk' instead of 'Whiskercloud'.",
+    "CONT-004": "Each page should have exactly one H1 tag. Demote extra H1s to H2 or remove them.",
+    "CONT-005": "Add descriptive alt text to images. Describe what the image shows for screen readers.",
+    "CONT-006": "Add unique meta titles in Yoast/RankMath for each page (under 60 characters).",
+    "CONT-007": "Add unique meta descriptions in Yoast/RankMath for each page (under 160 characters).",
+    "CONT-008": "Search for and remove any Lorem Ipsum, placeholder, or sample text.",
+    "CONT-009": "Set featured images on pages in WordPress editor sidebar.",
+    "CONT-010": "Add UserWay accessibility widget script to the site header or footer.",
+
+    # Footer
+    "FOOT-001": "Move social media links from header/nav to footer only. Remove from top bar if present.",
+    "FOOT-002": "Use Google Maps embed with the address, not a GMB listing link that shows reviews.",
+    "FOOT-003": "Search entire site for 'Whiskercloud' and remove or replace with 'PetDesk'.",
+
+    # Grammar/Spelling
+    "GRAM-001": "Review flagged spelling errors and correct them in WordPress. Ignore proper nouns if valid.",
+
+    # Navigation
+    "NAV-001": "Verify all nav menu links point to correct pages. Fix in Appearance > Menus.",
+
+    # Images
+    "IMG-001": "Re-upload broken images or fix file paths. Check Media Library for missing files.",
+
+    # SEO / Open Graph
+    "SEO-001": "Add og:title, og:description, and og:image meta tags. Use Yoast/RankMath Social tab.",
+
+    # Security
+    "SEC-001": "Change http:// URLs to https:// in image sources, scripts, and iframes.",
+
+    # Partner-specific
+    "WVP-001": "Change all CTA button text to 'Book Appointment' as required by Western.",
+    "WVP-005": "Add the Birdeye testimonial widget to the homepage.",
+    "WVP-007": "Remove social links from header/top bar - they should only appear in footer.",
+}
+
+# Category-based fallback advice when specific rule advice isn't available
+CATEGORY_ADVICE = {
+    "search_replace": "Use WordPress search or Better Search Replace plugin to find and fix leftover template text.",
+    "functionality": "Test the feature manually and fix any broken functionality in WordPress/Divi.",
+    "craftsmanship": "Review the visual element and adjust in Divi builder for consistency.",
+    "content": "Edit the content in WordPress to fix the issue.",
+    "footer": "Edit the footer in Divi or Appearance > Widgets to fix the issue.",
+    "navigation": "Fix navigation in Appearance > Menus.",
+    "grammar_spelling": "Review and correct the text in WordPress editor.",
+    "cta": "Update CTA buttons in Divi builder.",
+    "forms": "Check form settings and configuration.",
+}
+
+# ---------------------------------------------------------------------------
 # PetDesk brand assets (base64-encoded PNG, embedded for portable reports)
 # ---------------------------------------------------------------------------
 _ASSETS_DIR = os.path.dirname(__file__)
@@ -114,12 +191,15 @@ def generate_html_report(report) -> str:
             headline = _get_issue_headline(r.details, r.check)
             details_body = _get_issue_details_body(r.details)
             details_html = _format_details_body(details_body) if details_body else ""
+            fix_advice = _get_fix_advice(r.rule_id, r.category)
+            fix_html = f'<div class="fix-advice"><strong>How to fix:</strong> {_esc(fix_advice)}</div>' if fix_advice else ""
             failures_html += f"""
             <div class="issue-card fail-card">
                 <div class="issue-header">
                     <div class="issue-headline">{_esc(headline)}</div>
                     <span class="points-badge fail-points">-{r.points_lost} pts</span>
                 </div>
+                {fix_html}
                 <div class="issue-rule"><span class="rule-tag">{r.rule_id}</span> Rule: {_esc(r.check)}</div>
                 {f'<div class="issue-detail">{details_html}</div>' if details_html else ''}
             </div>"""
@@ -134,11 +214,14 @@ def generate_html_report(report) -> str:
             headline = _get_issue_headline(r.details, r.check)
             details_body = _get_issue_details_body(r.details)
             details_html = _format_details_body(details_body) if details_body else ""
+            fix_advice = _get_fix_advice(r.rule_id, r.category)
+            fix_html = f'<div class="fix-advice"><strong>How to fix:</strong> {_esc(fix_advice)}</div>' if fix_advice else ""
             warnings_html += f"""
             <div class="issue-card warn-card">
                 <div class="issue-header">
                     <div class="issue-headline">{_esc(headline)}</div>
                 </div>
+                {fix_html}
                 <div class="issue-rule"><span class="rule-tag">{r.rule_id}</span> Rule: {_esc(r.check)}</div>
                 {f'<div class="issue-detail">{details_html}</div>' if details_html else ''}
             </div>"""
@@ -409,6 +492,22 @@ def generate_html_report(report) -> str:
         }}
         .issue-title {{ font-size: 14px; font-weight: 600; color: var(--gray-900); }}
         .issue-headline {{ font-size: 15px; font-weight: 700; color: var(--gray-900); line-height: 1.4; }}
+        .fix-advice {{
+            font-size: 13px;
+            color: var(--gray-700);
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0 8px 0;
+            line-height: 1.5;
+        }}
+        .fix-advice strong {{ color: #166534; }}
+        .warn-card .fix-advice {{
+            background: #fefce8;
+            border-color: #fde68a;
+        }}
+        .warn-card .fix-advice strong {{ color: #a16207; }}
         .issue-rule {{ font-size: 12px; color: var(--gray-500); margin-top: 6px; margin-bottom: 8px; }}
         .rule-tag {{
             display: inline-block;
@@ -1001,6 +1100,15 @@ def _esc(text: str) -> str:
     if not text:
         return ""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _get_fix_advice(rule_id: str, category: str) -> str:
+    """Get fix advice for a rule, falling back to category advice if not found."""
+    if rule_id in FIX_ADVICE:
+        return FIX_ADVICE[rule_id]
+    if category in CATEGORY_ADVICE:
+        return CATEGORY_ADVICE[category]
+    return ""
 
 
 def _get_issue_headline(details: str, rule_check: str) -> str:
