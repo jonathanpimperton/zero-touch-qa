@@ -1211,6 +1211,8 @@ def _format_details_body(text: str) -> str:
     cid = f"details-collapse-{_details_collapse_counter}"
     count = len(lines)
     item_html = "".join(f"<li>{line}</li>" for line in lines)
+    plural = "s" if count != 1 else ""
+    label = f"Show details ({count} item{plural})"
 
     # All details collapsed by default with "Show details" button
     return (
@@ -1218,8 +1220,8 @@ def _format_details_body(text: str) -> str:
         f'<ul class="detail-list">{item_html}</ul></div>'
         f'<button class="collapse-toggle" onclick="var el=document.getElementById(\'{cid}\');'
         f'if(el.style.display===\'none\'){{el.style.display=\'block\';this.textContent=\'Hide details\'}}'
-        f'else{{el.style.display=\'none\';this.textContent=\'Show details ({count} item{\"s\" if count != 1 else \"\"})\'}}">'
-        f'Show details ({count} item{"s" if count != 1 else ""})</button>'
+        f'else{{el.style.display=\'none\';this.textContent=\'{label}\'}}">'
+        f'{label}</button>'
     )
 
 
