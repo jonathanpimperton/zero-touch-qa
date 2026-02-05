@@ -111,13 +111,17 @@ def generate_html_report(report) -> str:
     failures = [r for r in report.results if r.status == "FAIL"]
     if failures:
         for r in failures:
+            headline = _get_issue_headline(r.details, r.check)
+            details_body = _get_issue_details_body(r.details)
+            details_html = _format_details_body(details_body) if details_body else ""
             failures_html += f"""
             <div class="issue-card fail-card">
                 <div class="issue-header">
-                    <div class="issue-title"><span class="rule-tag">{r.rule_id}</span> {_esc(r.check)}</div>
-                    <span class="points-badge fail-points">-{r.points_lost} pts (weight {r.weight}x)</span>
+                    <div class="issue-headline">{_esc(headline)}</div>
+                    <span class="points-badge fail-points">-{r.points_lost} pts</span>
                 </div>
-                <div class="issue-detail">{_format_detail(r.details)}</div>
+                <div class="issue-rule"><span class="rule-tag">{r.rule_id}</span> Rule: {_esc(r.check)}</div>
+                {f'<div class="issue-detail">{details_html}</div>' if details_html else ''}
             </div>"""
     else:
         failures_html = '<div class="empty-state pass-state">No failures detected.</div>'
@@ -127,12 +131,16 @@ def generate_html_report(report) -> str:
     warns = [r for r in report.results if r.status == "WARN"]
     if warns:
         for r in warns:
+            headline = _get_issue_headline(r.details, r.check)
+            details_body = _get_issue_details_body(r.details)
+            details_html = _format_details_body(details_body) if details_body else ""
             warnings_html += f"""
             <div class="issue-card warn-card">
                 <div class="issue-header">
-                    <div class="issue-title"><span class="rule-tag">{r.rule_id}</span> {_esc(r.check)}</div>
+                    <div class="issue-headline">{_esc(headline)}</div>
                 </div>
-                <div class="issue-detail">{_format_detail(r.details)}</div>
+                <div class="issue-rule"><span class="rule-tag">{r.rule_id}</span> Rule: {_esc(r.check)}</div>
+                {f'<div class="issue-detail">{details_html}</div>' if details_html else ''}
             </div>"""
     else:
         warnings_html = '<div class="empty-state">No warnings.</div>'
@@ -400,6 +408,8 @@ def generate_html_report(report) -> str:
             gap: 12px;
         }}
         .issue-title {{ font-size: 14px; font-weight: 600; color: var(--gray-900); }}
+        .issue-headline {{ font-size: 15px; font-weight: 700; color: var(--gray-900); line-height: 1.4; }}
+        .issue-rule {{ font-size: 12px; color: var(--gray-500); margin-top: 6px; margin-bottom: 8px; }}
         .rule-tag {{
             display: inline-block;
             background: #e0e7ff;
@@ -991,6 +1001,70 @@ def _esc(text: str) -> str:
     if not text:
         return ""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _get_issue_headline(details: str, rule_check: str) -> str:
+    """Extract a clear headline from details, or derive one from the rule.
+
+    The headline should say what's WRONG, not what the rule checks for.
+    E.g., "6 images missing alt text" instead of "All images have alt text".
+    """
+    if not details:
+        # Negate the rule description for a failure headline
+        return f"Issue: {rule_check}"
+
+    # Details often start with a summary line like "6 images missing alt text"
+    first_line = details.split("\n")[0].strip()
+    if first_line:
+        return first_line
+    return f"Issue: {rule_check}"
+
+
+def _get_issue_details_body(details: str) -> str:
+    """Get the details body (everything after the first summary line)."""
+    if not details or "\n" not in details:
+        return ""
+    lines = details.split("\n", 1)
+    if len(lines) > 1:
+        return lines[1].strip()
+    return ""
+
+
+_details_collapse_counter = 0
+
+
+def _format_details_body(text: str) -> str:
+    """Format the details body (items only, no summary) into a collapsible list."""
+    global _details_collapse_counter
+    if not text:
+        return ""
+    escaped = _esc(text)
+    lines = [line.strip() for line in escaped.split("\n") if line.strip()]
+    if not lines:
+        return ""
+    if len(lines) == 1:
+        return f"<p>{lines[0]}</p>"
+
+    max_visible = 5
+    if len(lines) <= max_visible:
+        item_html = "".join(f"<li>{line}</li>" for line in lines)
+        return f'<ul class="detail-list">{item_html}</ul>'
+
+    # Collapsible
+    _details_collapse_counter += 1
+    cid = f"details-collapse-{_details_collapse_counter}"
+    visible_html = "".join(f"<li>{line}</li>" for line in lines[:max_visible])
+    hidden_html = "".join(f"<li>{line}</li>" for line in lines[max_visible:])
+    remaining = len(lines) - max_visible
+    return (
+        f'<ul class="detail-list">{visible_html}'
+        f'<div id="{cid}" class="collapse-content" style="display:none;">{hidden_html}</div>'
+        f'</ul>'
+        f'<button class="collapse-toggle" onclick="var el=document.getElementById(\'{cid}\');'
+        f'if(el.style.display===\'none\'){{el.style.display=\'block\';this.textContent=\'Hide details\'}}'
+        f'else{{el.style.display=\'none\';this.textContent=\'Show {remaining} more items\'}}">'
+        f'Show {remaining} more items</button>'
+    )
 
 
 _collapse_counter = 0
