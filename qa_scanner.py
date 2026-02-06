@@ -38,9 +38,9 @@ USER_AGENT = "ZeroTouchQA/1.0 (PetDesk Internal QA Scanner)"
 # Gemini API for AI-powered image analysis (primary)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# Optional: Google Generative AI SDK for vision analysis
+# Optional: Google GenAI SDK for vision analysis
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -3384,24 +3384,16 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str) -> str:
     import base64
 
     if AI_PROVIDER == "gemini":
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
-
-        # Gemini accepts PIL Image or bytes directly
-        import io
-        try:
-            from PIL import Image
-            img = Image.open(io.BytesIO(image_bytes))
-            response = model.generate_content([prompt, img])
-            return response.text.strip()
-        except ImportError:
-            # Without PIL, use base64
-            img_b64 = base64.b64encode(image_bytes).decode("utf-8")
-            response = model.generate_content([
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
                 prompt,
                 {"mime_type": "image/jpeg", "data": img_b64}
-            ])
-            return response.text.strip()
+            ]
+        )
+        return response.text.strip()
 
     elif AI_PROVIDER == "anthropic":
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
