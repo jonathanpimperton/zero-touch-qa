@@ -1394,19 +1394,7 @@ def check_lighthouse(pages: dict, rule: dict) -> list[CheckResult]:
     )]
 
 
-# Stubs for partner-specific checks
-def check_cta_on_pages(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Verify CTAs appear on required pages (Home, About, Services).")]
-
-def check_nav_structure(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Verify navigation matches partner layout specification.")]
-
-def check_topbar_layout(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Verify top bar layout: Phone/Email on left, Download App/Pharmacy on right.")]
-
+# Partner-specific check implementations
 def check_service_count(pages, rule):
     results = []
     max_svc = rule.get("max_services", 5)
@@ -1450,14 +1438,6 @@ def check_new_client_form(pages, rule):
     return [CheckResult(rule["id"], rule["category"], rule["check"], "WARN", rule["weight"],
                         "New Client Form page not found in crawl")]
 
-def check_privacy_policy_verbiage(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Privacy policy verbiage match requires manual comparison")]
-
-def check_photo_gallery_instructions(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Check that the photo gallery page includes form submission instructions for clients.")]
-
 def check_no_appt_cta_euthanasia(pages, rule):
     results = []
     euth_keywords = ["euthanasia", "end-of-life", "end_of_life", "cremation", "memorial"]
@@ -1474,10 +1454,6 @@ def check_no_appt_cta_euthanasia(pages, rule):
                                             points_lost=rule["weight"])]
     return [CheckResult(rule["id"], rule["category"], rule["check"], "PASS", rule["weight"],
                         "No appointment CTAs on euthanasia/end-of-life pages")]
-
-def check_career_tracking_url(pages, rule):
-    return [CheckResult(rule["id"], rule["category"], rule["check"], "HUMAN_REVIEW", rule["weight"],
-                        "Career page tracking URL requires manual verification")]
 
 
 # =============================================================================
@@ -1897,10 +1873,818 @@ def check_mixed_content(pages: dict, rule: dict) -> list[CheckResult]:
 
 
 # =============================================================================
+# NEW PARTNER-SPECIFIC AND ENHANCED CHECK FUNCTIONS
+# =============================================================================
+
+def check_cta_on_pages(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that CTAs appear on required pages (e.g., Home, About, Services)."""
+    results = []
+    required_pages = rule.get("required_pages", ["home", "about", "services"])
+    missing_cta = []
+
+    # Map page types to URL patterns
+    page_patterns = {
+        "home": ["/", ""],
+        "about": ["about", "about-us"],
+        "services": ["services", "our-services"],
+        "reviews": ["reviews", "testimonials"],
+        "aaha": ["aaha"],
+        "faq": ["faq", "faqs", "frequently-asked"],
+        "contact": ["contact", "contact-us"],
+    }
+
+    for page_type in required_pages:
+        patterns = page_patterns.get(page_type.lower(), [page_type.lower()])
+        found_page = None
+        has_cta = False
+
+        for url, page in pages.items():
+            parsed = urllib.parse.urlparse(url)
+            path = parsed.path.lower().strip("/")
+
+            # Check if this URL matches the page type
+            is_match = False
+            if page_type == "home" and path in ("", "/"):
+                is_match = True
+            elif any(p in path for p in patterns):
+                is_match = True
+
+            if is_match and page.soup:
+                found_page = url
+                # Look for CTA buttons/links
+                for el in page.soup.find_all(["a", "button"], class_=re.compile(r"cta|btn|button", re.I)):
+                    text = el.get_text(strip=True).lower()
+                    if any(w in text for w in ["book", "appointment", "schedule", "get started"]):
+                        has_cta = True
+                        break
+                # Also check for links with appointment-related text
+                if not has_cta:
+                    for a in page.soup.find_all("a", href=True):
+                        text = a.get_text(strip=True).lower()
+                        if any(w in text for w in ["book appointment", "schedule", "make appointment"]):
+                            has_cta = True
+                            break
+                break
+
+        if found_page and not has_cta:
+            missing_cta.append(page_type)
+
+    if missing_cta:
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=f"CTA missing on {len(missing_cta)} required page(s): {', '.join(missing_cta)}",
+            points_lost=rule["weight"],
+        ))
+    else:
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details=f"CTAs found on all {len(required_pages)} required pages",
+        ))
+    return results
+
+
+def check_nav_structure(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that navigation structure matches expected partner layout."""
+    results = []
+    expected_nav = rule.get("expected_nav", [])
+
+    if not expected_nav:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="No expected navigation structure defined in rule config.",
+        )]
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Find the main navigation
+        nav = page.soup.find("nav") or page.soup.find(id=re.compile(r"menu|nav", re.I))
+        if not nav:
+            header = page.soup.find("header")
+            if header:
+                nav = header.find("ul") or header.find(class_=re.compile(r"menu|nav", re.I))
+
+        if nav:
+            # Extract top-level nav items
+            nav_items = []
+            for a in nav.find_all("a", href=True):
+                text = a.get_text(strip=True)
+                # Skip empty or very short items
+                if text and len(text) > 1:
+                    # Get only top-level items (not deep nested)
+                    parent_li = a.find_parent("li")
+                    if parent_li:
+                        # Check if this is a top-level item
+                        parent_ul = parent_li.find_parent("ul")
+                        if parent_ul:
+                            grandparent_li = parent_ul.find_parent("li")
+                            if not grandparent_li or "sub" not in " ".join(parent_ul.get("class", [])).lower():
+                                if text not in nav_items:
+                                    nav_items.append(text)
+
+            # Compare with expected nav (case-insensitive, partial match)
+            found_items = []
+            missing_items = []
+
+            for expected in expected_nav:
+                found = False
+                for actual in nav_items:
+                    if expected.lower() in actual.lower() or actual.lower() in expected.lower():
+                        found = True
+                        found_items.append(expected)
+                        break
+                if not found:
+                    missing_items.append(expected)
+
+            if missing_items:
+                results.append(CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="FAIL", weight=rule["weight"],
+                    details=f"Missing nav items: {', '.join(missing_items)}. Found: {', '.join(nav_items[:10])}",
+                    points_lost=rule["weight"],
+                ))
+            else:
+                results.append(CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details=f"Navigation contains expected items: {', '.join(found_items)}",
+                ))
+            return results
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details="Could not locate navigation menu to verify structure.",
+    )]
+
+
+def check_topbar_layout(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check top bar layout: Phone/Email on left, Download App/Pharmacy on right."""
+    results = []
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Look for top bar / secondary menu
+        topbar = None
+        for selector in [
+            page.soup.find(class_=re.compile(r"top[-_]?bar|secondary[-_]?menu|header[-_]?top", re.I)),
+            page.soup.find(id=re.compile(r"top[-_]?bar|secondary", re.I)),
+        ]:
+            if selector:
+                topbar = selector
+                break
+
+        if not topbar:
+            # Try finding by common Divi patterns
+            header = page.soup.find("header")
+            if header:
+                topbar = header.find(class_=re.compile(r"et[-_]?top", re.I))
+
+        if topbar:
+            topbar_text = topbar.get_text(separator=" ", strip=True).lower()
+            topbar_html = str(topbar).lower()
+
+            # Check for expected elements
+            has_phone = bool(re.search(r"tel:|phone|\d{3}[-.\s]?\d{3}[-.\s]?\d{4}", topbar_html))
+            has_email = bool(re.search(r"mailto:|email|@", topbar_html))
+            has_app = "download" in topbar_text or "app" in topbar_text or "petdesk" in topbar_text
+            has_pharmacy = "pharmacy" in topbar_text or "online store" in topbar_text
+
+            issues = []
+            if not has_phone:
+                issues.append("phone number")
+            if not has_email:
+                issues.append("email")
+            if not has_app:
+                issues.append("Download App button")
+            if not has_pharmacy:
+                issues.append("Online Pharmacy/Store button")
+
+            if issues:
+                results.append(CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="WARN", weight=rule["weight"],
+                    details=f"Top bar may be missing: {', '.join(issues)}. Verify layout manually.",
+                ))
+            else:
+                results.append(CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Top bar contains phone, email, app download, and pharmacy links.",
+                ))
+            return results
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Could not locate top bar. Verify layout manually: Phone/Email left, App/Pharmacy right.",
+    )]
+
+
+def check_career_tracking_url(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that career page uses tracking URL (Jobvite, Workday, etc.) instead of form."""
+    results = []
+    tracking_domains = rule.get("tracking_domains", ["workday", "lever", "jobvite", "greenhouse", "icims"])
+
+    for url, page in pages.items():
+        if "career" in url.lower():
+            if not page.soup:
+                continue
+
+            # Check for tracking URLs
+            page_html = str(page.soup).lower()
+            found_tracker = None
+
+            for domain in tracking_domains:
+                if domain in page_html:
+                    found_tracker = domain
+                    break
+
+            # Check for iframes with tracking URLs
+            for iframe in page.soup.find_all("iframe", src=True):
+                src = iframe["src"].lower()
+                for domain in tracking_domains:
+                    if domain in src:
+                        found_tracker = domain
+                        break
+
+            # Check if there's a Gravity Form (bad - should use tracking URL)
+            has_gravity_form = "gform" in page_html or "gravity" in page_html
+
+            if found_tracker:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details=f"Career page uses {found_tracker} tracking URL.",
+                )]
+            elif has_gravity_form:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="FAIL", weight=rule["weight"],
+                    details="Career page uses Gravity Form instead of applicant tracking URL.",
+                    points_lost=rule["weight"],
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details="Career page not found or tracking URL not detected. Verify manually.",
+    )]
+
+
+def check_photo_gallery_instructions(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that photo gallery page includes form submission instructions."""
+    results = []
+    instruction_patterns = [
+        r"submit.*photo", r"upload.*photo", r"send.*photo",
+        r"email.*photo", r"share.*photo", r"photo.*form",
+        r"submit.*image", r"how to.*submit"
+    ]
+
+    for url, page in pages.items():
+        if "gallery" in url.lower() or "photo" in url.lower():
+            if not page.soup:
+                continue
+
+            page_text = page.soup.get_text(separator=" ", strip=True).lower()
+
+            for pattern in instruction_patterns:
+                if re.search(pattern, page_text):
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="PASS", weight=rule["weight"],
+                        details=f"Photo gallery page contains submission instructions.",
+                    )]
+
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="FAIL", weight=rule["weight"],
+                details="Photo gallery page found but no submission instructions detected.",
+                points_lost=rule["weight"],
+            )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details="Photo gallery page not found in crawl.",
+    )]
+
+
+def check_team_page_structure(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check team page groups staff by role (Vets, Techs, Admin, etc.)."""
+    results = []
+    role_keywords = ["veterinarian", "doctor", "dvm", "technician", "cvt", "manager",
+                     "administrative", "receptionist", "groomer", "team"]
+
+    for url, page in pages.items():
+        if any(x in url.lower() for x in ["team", "staff", "our-team", "doctors", "about"]):
+            if not page.soup:
+                continue
+
+            page_text = page.soup.get_text(separator=" ", strip=True).lower()
+            found_roles = [kw for kw in role_keywords if kw in page_text]
+
+            if len(found_roles) >= 2:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details=f"Team page contains role groupings: {', '.join(found_roles[:5])}",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify team page groups staff by role (Veterinarians, Technicians, Admin, etc.).",
+    )]
+
+
+def check_review_content(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check review page content is appropriate (positive, no euthanasia, proper name format)."""
+    results = []
+    issues = []
+
+    for url, page in pages.items():
+        if "review" in url.lower() or "testimonial" in url.lower():
+            if not page.soup:
+                continue
+
+            page_text = page.soup.get_text(separator=" ", strip=True).lower()
+
+            # Check for euthanasia mentions
+            if any(word in page_text for word in ["euthanasia", "put down", "put to sleep", "passed away"]):
+                issues.append("Contains euthanasia-related content")
+
+            # Check for negative indicators
+            negative_words = ["terrible", "awful", "worst", "never again", "do not recommend", "horrible"]
+            if any(word in page_text for word in negative_words):
+                issues.append("May contain negative reviews")
+
+            if issues:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="FAIL", weight=rule["weight"],
+                    details=f"Review page issues: {'; '.join(issues)}",
+                    points_lost=rule["weight"],
+                )]
+            else:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Review page content appears appropriate (no euthanasia mentions, positive reviews).",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Review page not found. Verify reviews are positive and use first name + last initial.",
+    )]
+
+
+def check_booking_widget(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check for Vetstoria or PetDesk booking widget integration."""
+    results = []
+    widget_patterns = ["vetstoria", "petdesk", "booking-widget", "appointment-widget"]
+
+    for url, page in pages.items():
+        if page.html:
+            html_lower = page.html.lower()
+            for pattern in widget_patterns:
+                if pattern in html_lower:
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="PASS", weight=rule["weight"],
+                        details=f"Booking widget detected: {pattern}",
+                    )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details="No Vetstoria or PetDesk booking widget detected. Verify booking integration manually.",
+    )]
+
+
+def check_no_popups(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that no popups are implemented on the site."""
+    results = []
+    popup_indicators = ["popup", "modal", "lightbox", "overlay"]
+
+    for url, page in pages.items():
+        if page.html:
+            html_lower = page.html.lower()
+            # Check for popup scripts/plugins
+            for indicator in popup_indicators:
+                # Look for popup classes/IDs that suggest active popups
+                if re.search(rf'class=["\'][^"\']*{indicator}[^"\']*["\']', html_lower):
+                    # Check if it's a visible popup (not just hidden structure)
+                    if "display:none" not in html_lower.replace(" ", ""):
+                        return [CheckResult(
+                            rule_id=rule["id"], category=rule["category"],
+                            check=rule["check"], status="WARN", weight=rule["weight"],
+                            details=f"Popup indicator found ({indicator}). Verify no active popups.",
+                        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No obvious popup implementations detected.",
+    )]
+
+
+def check_meta_title_quality(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that meta titles are unique and appropriate length."""
+    results = []
+    titles = {}
+    issues = []
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+        title_tag = page.soup.find("title")
+        if title_tag:
+            title = title_tag.get_text(strip=True)
+            # Check for duplicates
+            if title in titles:
+                issues.append(f"Duplicate title '{title[:50]}' on {url} and {titles[title]}")
+            else:
+                titles[title] = url
+            # Check length
+            if len(title) < 20:
+                issues.append(f"Title too short on {url}: '{title}'")
+            elif len(title) > 70:
+                issues.append(f"Title too long on {url} ({len(title)} chars)")
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"{len(issues)} title issue(s):\n" + "\n".join(issues[:5]),
+        )]
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details=f"All {len(titles)} page titles are unique and appropriate length.",
+    )]
+
+
+def check_privacy_policy_verbiage(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that privacy policy uses updated verbiage (Western-specific)."""
+    results = []
+    # Key phrases that should be in updated privacy policy
+    required_phrases = ["petdesk", "personal information", "privacy"]
+
+    for url, page in pages.items():
+        if "privacy" in url.lower():
+            if not page.soup:
+                continue
+            page_text = page.soup.get_text(separator=" ", strip=True).lower()
+
+            found_phrases = [p for p in required_phrases if p in page_text]
+
+            if len(found_phrases) >= 2:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Privacy policy contains expected verbiage.",
+                )]
+            else:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                    details="Privacy policy found but may need verbiage update. Compare with reference.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="FAIL", weight=rule["weight"],
+        details="Privacy policy page not found.",
+        points_lost=rule["weight"],
+    )]
+
+
+# Partner-specific checks: Heartland
+def check_sticky_header(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check for sticky/fixed header on mobile."""
+    for url, page in pages.items():
+        if page.html:
+            html_lower = page.html.lower()
+            if any(x in html_lower for x in ["position:fixed", "position: fixed", "sticky", "et_fixed_nav"]):
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Sticky/fixed header detected.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Could not confirm sticky header. Test on mobile device.",
+    )]
+
+
+def check_service_card_layout(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check main service page uses card-style layout."""
+    for url, page in pages.items():
+        if "service" in url.lower() and page.soup:
+            # Look for card-style classes
+            card_indicators = page.soup.find_all(class_=re.compile(r"card|grid|column|et_pb_column", re.I))
+            if len(card_indicators) >= 3:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Service page appears to use card/grid layout.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify main service page uses card-style layout.",
+    )]
+
+
+def check_no_mobile_popups(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check no popups on mobile (desktop OK)."""
+    # This requires actual mobile testing - flag for review
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Test on mobile device: popups should be disabled on mobile (desktop OK).",
+    )]
+
+
+def check_footer_centered(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that footer content is centered."""
+    for url, page in pages.items():
+        if page.soup:
+            footer = page.soup.find("footer")
+            if footer:
+                footer_style = str(footer.get("style", "")).lower()
+                footer_class = " ".join(footer.get("class", [])).lower()
+                footer_html = str(footer).lower()
+
+                if any(x in footer_html for x in ["text-align:center", "text-align: center", "center"]):
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="PASS", weight=rule["weight"],
+                        details="Footer appears to be centered.",
+                    )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify footer content is centered visually.",
+    )]
+
+
+# Partner-specific checks: United
+def check_no_pet_prefix(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check service titles don't use 'Pet' prefix (United requirement)."""
+    issues = []
+
+    for url, page in pages.items():
+        if "service" in url.lower() and page.soup:
+            h1s = page.soup.find_all("h1")
+            h2s = page.soup.find_all("h2")
+
+            for heading in h1s + h2s:
+                text = heading.get_text(strip=True)
+                if text.lower().startswith("pet "):
+                    issues.append(f"'{text}' on {url}")
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=f"Service titles with 'Pet' prefix: {'; '.join(issues[:3])}",
+            points_lost=rule["weight"],
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="Service titles do not use 'Pet' prefix.",
+    )]
+
+
+def check_contact_form_placement(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check contact form is only on contact page (United requirement)."""
+    forms_found = []
+
+    for url, page in pages.items():
+        if page.soup:
+            footer = page.soup.find("footer")
+            if footer:
+                forms = footer.find_all("form")
+                if forms:
+                    forms_found.append(url)
+
+    if forms_found:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=f"Contact form found in footer on {len(forms_found)} page(s). Should only be on contact page.",
+            points_lost=rule["weight"],
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No contact forms found in page footers.",
+    )]
+
+
+# Partner-specific checks: Rarebreed
+def check_jobvite_careers(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check careers page links to Jobvite."""
+    for url, page in pages.items():
+        if "career" in url.lower() and page.html:
+            if "jobvite" in page.html.lower():
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Jobvite integration found on careers page.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="FAIL", weight=rule["weight"],
+        details="Jobvite not found on careers page.",
+        points_lost=rule["weight"],
+    )]
+
+
+def check_service_pages_exist(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check that individual service pages exist (not just placeholders)."""
+    service_pages = []
+
+    for url, page in pages.items():
+        if "/service" in url.lower() and page.soup:
+            # Check if page has actual content (not just placeholder)
+            body = page.soup.find("body")
+            if body:
+                text = body.get_text(strip=True)
+                if len(text) > 200:  # Has substantial content
+                    service_pages.append(url)
+
+    if len(service_pages) >= 3:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details=f"Found {len(service_pages)} individual service pages with content.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details=f"Only {len(service_pages)} service pages found. Verify individual pages are created.",
+    )]
+
+
+# Partner-specific checks: EverVet
+def check_landing_page_links(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check landing page has minimal external links (EverVet)."""
+    # This is highly specific - flag for review
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify landing page only links to: map, appointment, pharmacy.",
+    )]
+
+
+# Partner-specific checks: Encore
+def check_lever_careers(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check careers page links to job.lever.co."""
+    for url, page in pages.items():
+        if "career" in url.lower() and page.html:
+            if "lever.co" in page.html.lower() or "jobs.lever" in page.html.lower():
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Lever.co integration found on careers page.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="FAIL", weight=rule["weight"],
+        details="job.lever.co not found on careers page.",
+        points_lost=rule["weight"],
+    )]
+
+
+# Partner-specific checks: AmeriVet
+def check_workday_careers(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check careers page links to Workday recruiting."""
+    for url, page in pages.items():
+        if "career" in url.lower() and page.html:
+            if "workday" in page.html.lower() or "myworkday" in page.html.lower():
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details="Workday integration found on careers page.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="FAIL", weight=rule["weight"],
+        details="Workday not found on careers page.",
+        points_lost=rule["weight"],
+    )]
+
+
+def check_service_column_layout(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check main services page uses expected column layout (AmeriVet: 3 columns)."""
+    expected_columns = rule.get("expected_columns", 3)
+
+    for url, page in pages.items():
+        if "service" in url.lower() and page.soup:
+            # Look for column structures
+            columns = page.soup.find_all(class_=re.compile(r"et_pb_column_1_3|col-md-4|column.*third", re.I))
+            if len(columns) >= expected_columns:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details=f"Services page appears to use {expected_columns}-column layout.",
+                )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details=f"Verify services page uses {expected_columns}-column layout.",
+    )]
+
+
+def check_heading_structure(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check H1 is facility name, H2 has SEO keywords (AmeriVet)."""
+    for url, page in pages.items():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path in ("/", "") and page.soup:  # Homepage
+            h1 = page.soup.find("h1")
+            h2 = page.soup.find("h2")
+
+            if h1 and h2:
+                h1_text = h1.get_text(strip=True)
+                h2_text = h2.get_text(strip=True)
+
+                # H1 should be short (facility name)
+                # H2 should be longer (overview with keywords)
+                if len(h1_text) < 100 and len(h2_text) > 20:
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="PASS", weight=rule["weight"],
+                        details=f"H1: '{h1_text[:50]}...', H2 present with content.",
+                    )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify H1 is facility name, H2 is brief overview with SEO keywords.",
+    )]
+
+
+def check_reviews_carousel(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check for reviews teaser/carousel below hero (AmeriVet)."""
+    carousel_indicators = ["carousel", "slider", "testimonial", "review", "swiper"]
+
+    for url, page in pages.items():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path in ("/", "") and page.soup:  # Homepage
+            body = str(page.soup).lower()
+            for indicator in carousel_indicators:
+                if indicator in body:
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="PASS", weight=rule["weight"],
+                        details=f"Reviews/testimonial section detected ({indicator}).",
+                    )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Verify reviews teaser/carousel exists below hero with link to Reviews page.",
+    )]
+
+
+def check_responsive_cta_text(pages: dict, rule: dict) -> list[CheckResult]:
+    """Check CTA text changes for responsive (AmeriVet: desktop vs mobile)."""
+    # This requires actual responsive testing
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+        details="Test responsive CTA: Desktop should say 'Call xxx-xxx-xxxx', Mobile should say 'Call for appointment'.",
+    )]
+
+
+# =============================================================================
 # CHECK FUNCTION REGISTRY
 # =============================================================================
 
 CHECK_FUNCTIONS = {
+    # Universal checks
     "check_leftover_text": check_leftover_text,
     "check_broken_links": check_broken_links,
     "check_phone_links": check_phone_links,
@@ -1920,26 +2704,61 @@ CHECK_FUNCTIONS = {
     "check_nav_links": check_nav_links,
     "check_map_iframe": check_map_iframe,
     "check_userway_widget": check_userway_widget,
-    "check_cta_text": check_cta_text,
-    "check_h1_no_welcome": check_h1_no_welcome,
-    "check_birdeye_widget": check_birdeye_widget,
-    "check_faq_no_hours": check_faq_no_hours,
     "check_form_success_pages": check_form_success_pages,
     "check_mobile_responsive": check_mobile_responsive,
     "check_featured_images": check_featured_images,
     "check_contrast": check_contrast,
     "check_lighthouse": check_lighthouse,
-    "check_cta_on_pages": check_cta_on_pages,
-    "check_nav_structure": check_nav_structure,
-    "check_topbar_layout": check_topbar_layout,
-    "check_service_count": check_service_count,
-    "check_new_client_form": check_new_client_form,
-    "check_privacy_policy_verbiage": check_privacy_policy_verbiage,
-    "check_photo_gallery_instructions": check_photo_gallery_instructions,
-    "check_no_appt_cta_euthanasia": check_no_appt_cta_euthanasia,
-    "check_career_tracking_url": check_career_tracking_url,
     "check_grammar_spelling": check_grammar_spelling,
     "check_broken_images": check_broken_images,
     "check_open_graph": check_open_graph,
     "check_mixed_content": check_mixed_content,
+    "check_meta_title_quality": check_meta_title_quality,
+    # Partner-specific: Western
+    "check_cta_text": check_cta_text,
+    "check_cta_on_pages": check_cta_on_pages,
+    "check_nav_structure": check_nav_structure,
+    "check_topbar_layout": check_topbar_layout,
+    "check_h1_no_welcome": check_h1_no_welcome,
+    "check_birdeye_widget": check_birdeye_widget,
+    "check_service_count": check_service_count,
+    "check_new_client_form": check_new_client_form,
+    "check_privacy_policy_verbiage": check_privacy_policy_verbiage,
+    "check_no_appt_cta_euthanasia": check_no_appt_cta_euthanasia,
+    "check_career_tracking_url": check_career_tracking_url,
+    "check_team_page_structure": check_team_page_structure,
+    "check_review_content": check_review_content,
+    "check_photo_gallery_instructions": check_photo_gallery_instructions,
+    "check_booking_widget": check_booking_widget,
+    "check_no_popups": check_no_popups,
+    # Partner-specific: Independent
+    "check_faq_no_hours": check_faq_no_hours,
+    # Partner-specific: Heartland
+    "check_sticky_header": check_sticky_header,
+    "check_service_card_layout": check_service_card_layout,
+    "check_no_mobile_popups": check_no_mobile_popups,
+    "check_footer_centered": check_footer_centered,
+    # Partner-specific: United
+    "check_no_pet_prefix": check_no_pet_prefix,
+    "check_contact_form_placement": check_contact_form_placement,
+    # Partner-specific: Rarebreed
+    "check_jobvite_careers": check_jobvite_careers,
+    "check_service_pages_exist": check_service_pages_exist,
+    # Partner-specific: EverVet
+    "check_landing_page_links": check_landing_page_links,
+    # Partner-specific: Encore
+    "check_lever_careers": check_lever_careers,
+    # Partner-specific: AmeriVet
+    "check_workday_careers": check_workday_careers,
+    "check_service_column_layout": check_service_column_layout,
+    "check_heading_structure": check_heading_structure,
+    "check_reviews_carousel": check_reviews_carousel,
+    "check_responsive_cta_text": check_responsive_cta_text,
 }
+
+# Import WordPress API check functions and merge
+try:
+    from wp_api import WP_CHECK_FUNCTIONS
+    CHECK_FUNCTIONS.update(WP_CHECK_FUNCTIONS)
+except ImportError:
+    pass  # wp_api not available

@@ -14,14 +14,14 @@ User (browser)  or  Wrike (webhook)
           \            /
            app.py (Flask web server)
               |
-     +--------+--------+---------+
-     |                  |         |
-qa_rules.py      qa_scanner.py  db.py
-(rule engine)    (crawler +      (PostgreSQL
-                  41 checks)      persistence)
-                        |
-                  qa_report.py
-                  (HTML + JSON output)
+     +--------+--------+----------+----------+
+     |                 |           |          |
+qa_rules.py     qa_scanner.py    db.py    wp_api.py
+(122 rules)     (57 checks +     (PostgreSQL (5 WP checks,
+                 crawling)        persistence) plugin client)
+                       |
+                 qa_report.py
+                 (HTML + JSON output)
 ```
 
 ## Web App Pages
@@ -43,11 +43,14 @@ qa_rules.py      qa_scanner.py  db.py
 | `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Embeds PetDesk logo. |
 | `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
-| `qa_scanner.py` | Site crawler and 41 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions. Integrates with Google PageSpeed Insights API and LanguageTool API (grammar/spelling). Checks include broken links, broken images, Open Graph tags, mixed content, and more. |
+| `qa_scanner.py` | Site crawler and 57 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 62 total). Integrates with Google PageSpeed Insights API and LanguageTool API (grammar/spelling). Checks include broken links, broken images, Open Graph tags, mixed content, partner-specific validations, and more. |
+| `wp_api.py` | WordPress API clients for back-end checks. `PetDeskQAPluginClient` (recommended) uses the PetDesk QA Connector plugin with a shared API key. `WordPressAPIClient` (fallback) uses Application Password auth. Both verify plugin/theme updates, timezone, media cleanup, and form notifications. |
+| `petdesk-qa-plugin/` | WordPress plugin directory containing `petdesk-qa-connector.php`. Install on sites to enable automated back-end checks. |
+| `petdesk-qa-plugin.zip` | Zipped plugin ready for upload via WordPress admin > Plugins > Add New > Upload Plugin. |
 | `qa_report.py` | Report generators. `generate_html_report()` produces a polished HTML report with PetDesk brand assets, SVG score ring, colored section banners, collapsible detail lists, interactive human review checklist (Pass/Fail/N/A buttons + comments), a non-printing toolbar (Copy URL, Save as PDF, navigation), and print-friendly layout. `generate_wrike_comment()` produces Wrike-formatted HTML. `generate_json_report()` produces JSON for audit trail. |
 | `rules.json` | All QA rules as JSON data. Editable via `/rules/edit` in the web app. Contains universal rules and partner-specific overlays. |
 | `run_qa.py` | CLI fallback for testing. Not the primary interface. |
-| `proposal.html` | Professional HTML presentation (17 slides) for hackathon submission with embedded screenshots of the web interface. Print to PDF from browser. Uses PetDesk template colors and fonts. |
+| `proposal.html` | Professional HTML presentation (18 slides) for hackathon submission with embedded screenshots of the web interface. Print to PDF from browser. Uses PetDesk template colors and fonts. |
 | `_build_proposal.py` | Script to regenerate `proposal.html`. Run `python _build_proposal.py` if slides need updating. Loads brand assets and screenshot PNGs as base64. |
 | `PROPOSAL.md` | Markdown version of the hackathon proposal. |
 | `Petdesk Logo.png` | PetDesk logo (purple text, high-res) for white backgrounds. Base64-embedded in reports and web UI. |
@@ -97,6 +100,29 @@ python app.py
 
 Local development works without PostgreSQL — when `DATABASE_URL` is not set, the app falls back to filesystem storage in `reports/`.
 
+## Production Deployment (Recommended)
+
+For production use beyond the hackathon, **Google Cloud Run + Firestore** is recommended over Render:
+
+| Factor | Render (Hackathon) | Google Cloud (Production) |
+|--------|-------------------|---------------------------|
+| Platform | Render.com | Cloud Run |
+| Database | Render PostgreSQL | Firestore or Cloud SQL |
+| Cost | $14/mo (Web $7 + DB $7) | ~$0-5/mo (free tier eligible) |
+| Identity | Separate login | Google Workspace SSO |
+| Data residency | Third-party infrastructure | PetDesk's GCP project |
+| Compliance | SOC 2 | SOC 2, HIPAA, ISO 27001 |
+| Vendor agreements | New third party | Already in place |
+
+**Security benefits of Google Cloud:**
+- Integrates with existing Google Workspace identity management
+- Keeps scan data within PetDesk's GCP boundary
+- Granular IAM roles and VPC networking
+- Cloud Audit Logs for compliance
+- No new vendor data handling agreements needed
+
+**Migration path:** The Flask app runs on Cloud Run with minimal changes. Firestore would require schema changes (NoSQL), or use Cloud SQL for drop-in PostgreSQL compatibility.
+
 ## Database Persistence
 
 Scan results are stored in PostgreSQL (when `DATABASE_URL` is set) for persistence across deploys. The database layer (`db.py`) provides:
@@ -125,14 +151,16 @@ Key functions in `db.py`:
 ## Rule Categories
 
 - `search_replace` - Leftover template text (WhiskerFrame, placeholder addresses/phones/emails)
+- `wordpress_backend` - Plugin/theme updates, timezone settings, media library cleanup, form notifications (requires WP_USER + WP_APP_PASSWORD)
 - `functionality` - Broken links (403s reported as warnings, not failures), broken images, mixed content (HTTP on HTTPS), phone/email hyperlinks, form success pages, mobile responsiveness, Lighthouse (requires PSI_API_KEY, otherwise flagged for human review)
 - `craftsmanship` - Logo, favicon, contrast/accessibility
 - `content` - H1 tags, alt text, meta titles/descriptions, Open Graph social sharing tags, placeholder text, privacy policy, accessibility statement, Whiskercloud removal
 - `grammar_spelling` - Grammar and spelling errors checked via LanguageTool API (free, open-source)
 - `footer` - Social links placement, map iframe, powered-by text
-- `navigation` - Nav link validation
+- `navigation` - Nav link validation, navigation structure
 - `cta` - CTA text and placement (partner-specific)
 - `forms` - New client form, career page tracking URL
+- `partner_specific` - Partner-specific rules for Western, Heartland, United, Rarebreed, EverVet, Encore, AmeriVet (career widgets, layout requirements, naming conventions)
 - `human_review` - Brand tone, image appropriateness, visual consistency (cannot be automated). Report provides Pass/Fail/N/A buttons and a comments field for each item. Human FAIL decisions lower the score (by the item's weight); PASS keeps it unchanged. Human review items only appear in the dedicated checklist section, not duplicated in category tables.
 
 ## Grammar & Spelling Checks
@@ -207,13 +235,48 @@ History persists across deploys via PostgreSQL. No data lost on redeploy.
 
 Each scan gets a unique ID (QA-0001, QA-0002, ...). The ID is determined by the combination of site URL + build phase — re-scanning the same site at the same phase reuses the same ID. A new site or different phase gets the next available number. IDs are generated atomically via PostgreSQL SEQUENCE (or `scan_counter.json` as fallback).
 
+## WordPress Back-End Checks (via PetDesk QA Plugin)
+
+The scanner includes 5 WordPress back-end checks that validate settings not visible on the front-end:
+
+| Check | Rule ID | Description |
+|-------|---------|-------------|
+| Plugin updates | WPBE-001 | Verifies all plugins are up to date |
+| Theme updates | WPBE-002 | Verifies all themes are up to date |
+| Timezone | WPBE-003 | Extracts clinic address from website and validates WordPress timezone matches the location's expected timezone |
+| Media cleanup | WPBE-004 | Flags old/template media files (placeholder images) |
+| Form notifications | WPBE-005 | Verifies form emails go to clinic, not template addresses (supports Gravity Forms and WPForms) |
+
+### PetDesk QA Connector Plugin
+
+These checks require the **PetDesk QA Connector** plugin to be installed on each site. The plugin:
+- Exposes a secure REST endpoint at `/wp-json/petdesk-qa/v1/site-check`
+- Authenticates via a shared API key (no per-site credentials needed)
+- Returns plugin/theme versions, timezone, media info, and form notification settings
+- Is invisible to site visitors (backend only)
+
+**Installation:**
+1. Download `petdesk-qa-plugin.zip` from this repo
+2. In WordPress admin, go to Plugins > Add New > Upload Plugin
+3. Upload the zip file and activate
+4. That's it - the scanner will automatically detect and use the plugin
+
+**For the website building team:** Add "Install PetDesk QA Connector plugin" to the site build checklist. The plugin is lightweight (<10KB) and has no front-end impact.
+
+**Fallback:** If the plugin is not installed, checks fall back to HUMAN_REVIEW with instructions for manual verification in wp-admin.
+
+**Auto-Update:** The plugin includes GitHub auto-update support. When a new release is published to `jonathanpimperton/zero-touch-qa`, all sites with the plugin will see "Update Available" in wp-admin and can one-click update. To release a plugin update:
+1. Update `PETDESK_QA_VERSION` in `petdesk-qa-connector.php`
+2. Recreate `petdesk-qa-plugin.zip`
+3. Create a GitHub release: `gh release create v1.2.0 petdesk-qa-plugin.zip --title "Plugin v1.2.0"`
+
 ## Key Configuration (.env)
 
 - `DATABASE_URL` - PostgreSQL connection string. Set automatically by Render via `render.yaml`. Without it, app falls back to filesystem storage.
 - `PSI_API_KEY` - Google PageSpeed Insights key. Enables rendered-page checks (mobile usability, performance, contrast, CLS). Free from Google Cloud Console. Without it, scanner falls back to HTML-only checks.
+- `PETDESK_QA_API_KEY` - Shared API key for the PetDesk QA Connector plugin. Must match the key in the plugin. Default is `petdesk-qa-2026-hackathon-key` for demo purposes. Change in production.
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
-- `TEST_SITE_*` / `FINAL_SITE_*` - WordPress admin credentials for the hackathon test sites.
 
 ## Test Sites (Demo Results)
 
@@ -296,8 +359,10 @@ Note: PDF generation requires adding WeasyPrint or a similar library in producti
 
 ## Hackathon Deliverables
 
-1. **Working prototype** - Flask web app with 41 check functions across 55 rules, grammar/spelling, broken images, social sharing, mixed content, real scan results
-2. **Professional proposal** - `proposal.html` (17-slide deck with embedded screenshots, print to PDF via browser)
+1. **Working prototype** - Flask web app with 66 check functions across 122 rules (89 automated, 33 human review) covering all 8 partners, grammar/spelling, broken images, social sharing, mixed content, WordPress back-end checks, real scan results
+2. **Professional proposal** - `proposal.html` (18-slide deck with embedded screenshots, includes WordPress plugin explanation, print to PDF via browser)
 3. **Demo results** - Scans of both provided test sites with real scores
 4. **Cloud-ready** - Dockerfile + Render.com config with PostgreSQL for persistent storage
 5. **QA self-service** - Rules editor and scan history accessible via web app
+6. **Full partner coverage** - Partner-specific rules for all 8 partners (Independent, Western, Heartland, United, Rarebreed, EverVet, Encore, AmeriVet)
+7. **WordPress API integration** - Back-end checks for plugins, themes, timezone, media, and form notifications

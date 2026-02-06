@@ -19,6 +19,7 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
 from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
+from wp_api import PetDeskQAPluginClient, WordPressAPIClient, WP_CHECK_FUNCTIONS
 from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
     db_load_scan_history, db_get_report, db_seed_from_filesystem
 
@@ -51,6 +52,9 @@ WRIKE_API_TOKEN = os.environ.get("WRIKE_API_TOKEN", "")
 WRIKE_CUSTOM_FIELD_SITE_URL = os.environ.get("WRIKE_CF_SITE_URL", "")     # custom field ID for site URL
 WRIKE_CUSTOM_FIELD_PARTNER = os.environ.get("WRIKE_CF_PARTNER", "")       # custom field ID for partner
 WRIKE_CUSTOM_FIELD_PHASE = os.environ.get("WRIKE_CF_PHASE", "")           # custom field ID for phase
+
+# PetDesk QA Plugin API key (shared across all sites with the plugin installed)
+PETDESK_QA_API_KEY = os.environ.get("PETDESK_QA_API_KEY", "petdesk-qa-2026-hackathon-key")
 
 # Store scan history in memory (backed by PostgreSQL when DATABASE_URL is set)
 scan_history = []
@@ -107,7 +111,14 @@ def _get_scan_id(site_url: str, phase: str) -> str:
 # ---------------------------------------------------------------------------
 
 def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> ScanReport:
-    """Run the full QA scan against a site."""
+    """Run the full QA scan against a site.
+
+    Args:
+        site_url: URL of the site to scan
+        partner: Partner name (e.g., 'western', 'independent')
+        phase: Build phase ('prototype', 'full', 'final')
+        max_pages: Maximum pages to crawl
+    """
     rules = get_rules_for_scan(partner, phase)
     auto_rules = get_automatable_rules(rules)
     human_rules = get_human_review_rules(rules)
@@ -116,6 +127,12 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> Sc
     crawler = SiteCrawler(site_url)
     pages = crawler.crawl(max_pages=max_pages)
 
+    # Try PetDesk QA Plugin first (recommended - single API key for all sites)
+    # Falls back to HUMAN_REVIEW if plugin not installed
+    wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
+    if not wp_client.is_available():
+        wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
+
     # Run checks
     all_results = []
     for rule in auto_rules:
@@ -123,7 +140,11 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> Sc
         if fn_name and fn_name in CHECK_FUNCTIONS:
             fn = CHECK_FUNCTIONS[fn_name]
             try:
-                results = fn(pages, rule)
+                # WordPress checks need the wp_client parameter
+                if fn_name in WP_CHECK_FUNCTIONS:
+                    results = fn(pages, rule, wp_client=wp_client)
+                else:
+                    results = fn(pages, rule)
                 all_results.extend(results)
             except Exception as e:
                 all_results.append(CheckResult(
@@ -485,8 +506,9 @@ HOME_PAGE = """<!DOCTYPE html>
                 { text: 'Connecting to site...', icon: '🔗' },
                 { text: 'Crawling pages...', icon: '🕷️' },
                 { text: 'Running QA checks...', icon: '✓' },
+                { text: 'Checking WordPress backend...', icon: '🔐' },
                 { text: 'Checking grammar & spelling...', icon: '📝' },
-                { text: 'Generating report...', icon: '📊' }
+                { text: 'Generating report...', icon: '📊' },
             ];
             let currentStep = 0;
 

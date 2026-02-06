@@ -369,7 +369,44 @@ def main():
     </div>
     ''')
 
-    # SLIDE 12: Grammar & Spelling Checks
+    # SLIDE 12: WordPress Backend Checks (Plugin)
+    slides.append(f'''
+    <div class="slide">
+        <h2>WordPress Backend Checks</h2>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 16px;">The scanner checks WordPress admin settings via the <strong>PetDesk QA Connector</strong> — a lightweight plugin that exposes backend data through a secure API.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
+            <div class="card">
+                <h3 style="color: #5820BA; margin-bottom: 8px;">What It Checks</h3>
+                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px;">
+                    <li>Plugin &amp; theme updates pending</li>
+                    <li>Timezone matches clinic location</li>
+                    <li>Old/template media files in library</li>
+                    <li>Form notification recipients (Gravity Forms)</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3 style="color: #22c55e; margin-bottom: 8px;">Security</h3>
+                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px;">
+                    <li>Single API key — no per-site credentials</li>
+                    <li>Read-only access — cannot modify site</li>
+                    <li>API key verified via secure header</li>
+                    <li>Endpoint invisible to unauthenticated users</li>
+                </ul>
+            </div>
+        </div>
+        <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 12px 16px; border-radius: 4px; margin-bottom: 12px;">
+            <h3 style="color: #22c55e; font-size: 13px; margin-bottom: 4px;">Installation (One-Time)</h3>
+            <p style="font-size: 12px; line-height: 1.5;">Upload <code>petdesk-qa-plugin.zip</code> via WordPress Admin &rarr; Plugins &rarr; Add New &rarr; Upload. Activate. Done. All future sites with the plugin are automatically scannable.</p>
+        </div>
+        <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 14px; border-radius: 4px;">
+            <p style="font-size: 11px; font-weight: 500;">Tested and working on both hackathon test sites. Plugin returns WordPress 6.9, 30+ plugins, theme status, timezone, and media library info.</p>
+        </div>
+        <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
+        <div class="slide-num">12</div>
+    </div>
+    ''')
+
+    # SLIDE 13: Grammar & Spelling Checks
     slides.append(f'''
     <div class="slide">
         <h2>Grammar & Spelling Checks</h2>
@@ -388,11 +425,11 @@ def main():
             <p style="font-size: 13px; font-weight: 500; color: #3C1161;">Catches typos and misspellings while automatically allowing veterinary terminology. No false positives on medical terms.</p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
-        <div class="slide-num">12</div>
+        <div class="slide-num">13</div>
     </div>
     ''')
 
-    # SLIDE 13: Scan History & Audit Trail
+    # SLIDE 14: Scan History & Audit Trail
     slides.append(f'''
     <div class="slide">
         <h2>Scan History & Audit Trail</h2>
@@ -413,54 +450,81 @@ def main():
             </div>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
-        <div class="slide-num">13</div>
-    </div>
-    ''')
-
-    # SLIDE 14: Technology (DUMBED DOWN)
-    slides.append(f'''
-    <div class="slide">
-        <h2>What Powers This</h2>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
-            <div class="card" style="background: linear-gradient(135deg, #faf5ff, #f3e8ff); border-left: 4px solid #5820BA;">
-                <h3 style="color: #5820BA;">Website Scanner</h3>
-                <p style="font-size: 13px; line-height: 1.6;">Crawls every page. Checks links, images, text, structure, metadata, and security. Automatically uses a headless browser for pages with JavaScript-rendered content.</p>
-            </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-left: 4px solid #22c55e;">
-                <h3 style="color: #22c55e;">QA Rules Engine</h3>
-                <p style="font-size: 13px; line-height: 1.6;">55 rules across 10 categories. Applies the right rules for each partner and build phase. QA team edits rules via the web app.</p>
-            </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfeff, #cffafe); border-left: 4px solid #2DCCE8;">
-                <h3 style="color: #0891b2;">Report Generator</h3>
-                <p style="font-size: 13px; line-height: 1.6;">Scored report with failures, warnings, and a human review checklist. Grammar/spelling, broken images, social sharing, and mixed content all flagged automatically.</p>
-            </div>
-        </div>
-        <div style="background: #FAF5FF; border-left: 4px solid #2DCCE8; padding: 12px 16px; border-radius: 4px;">
-            <p style="font-size: 14px; font-weight: 500;">Runs in the cloud. No software to install. Just open the web app.</p>
-        </div>
-        <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">14</div>
     </div>
     ''')
 
-    # SLIDE 15: Gaps & Future Enhancements
+    # SLIDE 15: Technology & Deployment
     slides.append(f'''
     <div class="slide">
-        <h2>Known Gaps & Future Enhancements</h2>
+        <h2>Technology & Deployment</h2>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;">
+            <div class="card" style="background: linear-gradient(135deg, #faf5ff, #f3e8ff); border-left: 4px solid #5820BA; padding: 10px 14px;">
+                <h3 style="color: #5820BA; font-size: 12px;">Website Scanner</h3>
+                <p style="font-size: 11px; line-height: 1.5;">Crawls pages, checks links, images, text, metadata, security.</p>
+            </div>
+            <div class="card" style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-left: 4px solid #22c55e; padding: 10px 14px;">
+                <h3 style="color: #22c55e; font-size: 12px;">QA Rules Engine</h3>
+                <p style="font-size: 11px; line-height: 1.5;">89 rules, 10 categories. QA team edits rules via web app.</p>
+            </div>
+            <div class="card" style="background: linear-gradient(135deg, #ecfeff, #cffafe); border-left: 4px solid #2DCCE8; padding: 10px 14px;">
+                <h3 style="color: #0891b2; font-size: 12px;">Report Generator</h3>
+                <p style="font-size: 11px; line-height: 1.5;">Scored reports with failures, warnings, human review checklist.</p>
+            </div>
+        </div>
+        <table class="data-table" style="font-size: 11px; margin-bottom: 12px;">
+            <thead>
+                <tr>
+                    <th style="padding: 6px 10px;"></th>
+                    <th style="padding: 6px 10px;">Hackathon Demo</th>
+                    <th style="padding: 6px 10px;">Production (Recommended)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 6px 10px; font-weight: 600;">Platform</td>
+                    <td style="padding: 6px 10px;">Render.com</td>
+                    <td style="padding: 6px 10px;">Google Cloud Run</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 10px; font-weight: 600;">Database</td>
+                    <td style="padding: 6px 10px;">Render PostgreSQL</td>
+                    <td style="padding: 6px 10px;">Firestore or Cloud SQL</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 10px; font-weight: 600;">Cost</td>
+                    <td style="padding: 6px 10px;">$14/mo (Web $7 + DB $7)</td>
+                    <td style="padding: 6px 10px;">~$0&ndash;5/mo (free tier eligible)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 10px; font-weight: 600;">Identity</td>
+                    <td style="padding: 6px 10px;">Separate login</td>
+                    <td style="padding: 6px 10px;">Google Workspace SSO</td>
+                </tr>
+            </tbody>
+        </table>
+        <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 10px 14px; border-radius: 4px;">
+            <p style="font-size: 11px; line-height: 1.5;"><strong style="color: #22c55e;">Security:</strong> Google Cloud integrates with existing Workspace identity, keeps data within PetDesk&rsquo;s GCP boundary, offers granular IAM, audit logging, and compliance certs (SOC 2, HIPAA, ISO 27001). No new vendor agreements needed.</p>
+        </div>
+        <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
+        <div class="slide-num">15</div>
+    </div>
+    ''')
+
+    # SLIDE 16: Gaps & Future Enhancements
+    slides.append(f'''
+    <div class="slide">
+        <h2>Gaps & Future Enhancements</h2>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div>
-                <div style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 600; font-size: 13px;">Current Gaps</div>
-                <div class="card" style="margin-bottom: 10px; font-size: 12px;">
-                    <h3 style="font-size: 13px;">WordPress Admin Checks</h3>
-                    <p style="line-height: 1.5;">Back-end checks (plugin versions, settings) require WordPress API access</p>
-                </div>
+                <div style="background: #f59e0b; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 600; font-size: 13px;">Current Gaps</div>
                 <div class="card" style="margin-bottom: 10px; font-size: 12px;">
                     <h3 style="font-size: 13px;">Form Submission Testing</h3>
-                    <p style="line-height: 1.5;">Actually submitting forms to verify success pages needs a browser automation tool</p>
+                    <p style="line-height: 1.5;">Actually submitting forms to verify success pages and email delivery requires browser automation (Playwright)</p>
                 </div>
                 <div class="card" style="font-size: 12px;">
                     <h3 style="font-size: 13px;">Visual Layout Judgment</h3>
-                    <p style="line-height: 1.5;">Alignment, spacing, and "does this look right" still needs a human eye</p>
+                    <p style="line-height: 1.5;">Alignment, spacing, and "does this look right" still needs a human eye &mdash; flagged in human review checklist</p>
                 </div>
             </div>
             <div>
@@ -471,7 +535,7 @@ def main():
                 </div>
                 <div class="card" style="margin-bottom: 10px; font-size: 12px;">
                     <h3 style="font-size: 13px;">Analytics Dashboard</h3>
-                    <p style="line-height: 1.5;">Build trending reports and aggregate analytics from the PostgreSQL scan history &mdash; track QA pass rates over time, common failure patterns, partner comparisons.</p>
+                    <p style="line-height: 1.5;">Build trending reports from PostgreSQL scan history &mdash; pass rates, failure patterns, partner comparisons</p>
                 </div>
                 <div class="card" style="font-size: 12px;">
                     <h3 style="font-size: 13px;">More Partner Templates</h3>
@@ -480,11 +544,11 @@ def main():
             </div>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
-        <div class="slide-num">15</div>
+        <div class="slide-num">16</div>
     </div>
     ''')
 
-    # SLIDE 16: Pilot Recommendation
+    # SLIDE 17: Pilot Recommendation
     slides.append(f'''
     <div class="slide">
         <h2>Pilot Recommendation</h2>
@@ -518,11 +582,11 @@ def main():
             <p style="font-size: 12px; line-height: 1.5;">≥95% catch rate • <10% false positives • ≥50% time reduction • zero escapes</p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
-        <div class="slide-num">16</div>
+        <div class="slide-num">17</div>
     </div>
     ''')
 
-    # SLIDE 17: Closing (DARK)
+    # SLIDE 18: Closing (DARK)
     slides.append(f'''
     <div class="slide dark-slide" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
         <div class="slide-logo-wrap" style="position: static; margin-bottom: 24px; transform: none;">
@@ -532,7 +596,7 @@ def main():
         <p style="font-size: 18px; color: #DDEE91; font-weight: 600; margin-bottom: 20px;">Scan smarter. Ship faster.</p>
         <p style="font-size: 14px; color: rgba(255,255,255,0.8); margin-bottom: 8px;">Ready for pilot</p>
         <p style="font-size: 13px; color: rgba(255,255,255,0.5);">Live demo: <a href="https://zero-touch-qa.onrender.com" target="_blank" id="live-url" style="color: #DDEE91; text-decoration: underline;">zero-touch-qa.onrender.com</a></p>
-        <div class="slide-num">17</div>
+        <div class="slide-num">18</div>
     </div>
     ''')
 

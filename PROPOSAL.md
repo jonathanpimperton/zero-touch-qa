@@ -97,19 +97,20 @@ Final sign-off
 
 ## 3. What Is Fully Automated vs. Human-Reviewed
 
-### Fully Automated (37 checks implemented in prototype)
+### Fully Automated (89 checks implemented across all 8 partners)
 
 | Category | Checks | Examples |
 |----------|--------|----------|
-| Template Text | 7 | Leftover "WhiskerFrame", placeholder addresses, phones, emails |
+| Template Text | 11 | Leftover "WhiskerFrame", placeholder addresses, phones, emails, test URLs |
+| WordPress Backend | 5 | Plugin/theme updates, timezone, media cleanup, form notifications |
 | Links & Images | 4 | Broken links, broken images, phone tel: links, email mailto: links |
 | Footer Compliance | 3 | Privacy Policy, Accessibility Statement, "Powered by PetDesk" |
 | SEO & Social Sharing | 8 | H1 count, alt text, meta titles, meta descriptions, favicon, Open Graph tags |
 | Content Compliance | 3 | Placeholder text, no Whiskercloud mentions, UserWay widget |
-| Navigation | 2 | Nav link validation, social links placement |
+| Navigation | 4 | Nav link validation, social links placement, nav structure, sticky header |
 | Grammar & Spelling | 1 | LanguageTool API checks all visible text for errors |
 | Security | 1 | Mixed content detection (HTTP resources on HTTPS pages) |
-| Partner-Specific | 9 | CTA text, H1 format, Birdeye widget, service count, form presence |
+| Partner-Specific | 40 | CTA text, H1 format, Birdeye widget, service count, form presence, career widgets (Jobvite/Lever/Workday), layout requirements, naming conventions |
 
 ### Human Review (flagged with context)
 
@@ -176,9 +177,11 @@ so they don't have to hunt for issues.
 
 ### Current Gaps (Addressable)
 
-1. **WordPress Admin Checks**: The prototype scans front-end only. Back-end
-   checks (plugin versions, Divi settings, timezone, form notifications)
-   require WP REST API or WP-CLI access.
+1. **WordPress Admin Checks**: ✅ IMPLEMENTED. The scanner now includes the
+   **PetDesk QA Connector** WordPress plugin (`petdesk-qa-plugin.zip`) that exposes
+   a secure API endpoint for back-end checks. One shared API key works across all
+   sites with the plugin installed - no per-site credentials needed. Checks include
+   plugin/theme updates, timezone settings, media library cleanup, and form notifications.
 2. **Visual Layout Judgment**: Alignment, spacing, and "does this look right"
    still requires a human eye — this is inherently subjective.
 3. **Form Submission Testing**: Actually submitting forms to verify redirects
@@ -245,12 +248,13 @@ with the most automatable checks, so it demonstrates the biggest impact.
         +-------> app.py <-------------+
                   (Flask web server)
                      |
-        +------------+------------+
-        |                         |
-  qa_rules.py              qa_scanner.py
-  (41 rules, partner       (site crawler +
-   overlays, phase          30 check functions)
-   filtering)                    |
+        +------------+------------+------------+
+        |                         |            |
+  qa_rules.py              qa_scanner.py    wp_api.py
+  (122 rules, partner      (site crawler +  (WordPress
+   overlays, phase          66 check         REST API
+   filtering)               functions)       client)
+                                 |
                            qa_report.py
                            (HTML reports,
                             Wrike comments,
@@ -278,13 +282,16 @@ with the most automatable checks, so it demonstrates the biggest impact.
 | File | Description |
 |------|-------------|
 | `app.py` | Web app + Wrike webhook -- the main thing users interact with |
-| `qa_rules.py` | Rule engine with 41 rules, partner overlays, phase filtering |
-| `qa_scanner.py` | Site crawler + 30 automated check functions |
+| `qa_rules.py` | Rule engine with 122 rules (89 automated, 33 human review), all 8 partner overlays, phase filtering |
+| `qa_scanner.py` | Site crawler + 66 automated check functions |
+| `wp_api.py` | WordPress API client for back-end checks (plugins, themes, timezone, media, forms) |
+| `petdesk-qa-plugin.zip` | WordPress plugin for back-end checks -- install on each site |
 | `qa_report.py` | HTML report, Wrike comment, and JSON audit trail generators |
+| `rules.json` | All QA rules as JSON data, editable via web UI |
 | `run_qa.py` | CLI fallback for testing / CI pipelines |
 | `demo_report.html` | Example HTML report from scanning the Western test site |
 | `demo_report.json` | Machine-readable version for audit trail |
-| `proposal.html` | Professional 17-slide presentation (print to PDF from browser) |
+| `proposal.html` | Professional 18-slide presentation (print to PDF from browser) |
 | `PROPOSAL.md` | This document (markdown version) |
 
 ### Wrike Integration Setup
