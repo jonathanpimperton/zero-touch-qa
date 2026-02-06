@@ -17,7 +17,7 @@ User (browser)  or  Wrike (webhook)
      +--------+--------+----------+----------+
      |                 |           |          |
 qa_rules.py     qa_scanner.py    db.py    wp_api.py
-(119 rules)     (62 checks +     (PostgreSQL (5 WP checks,
+(122 rules)     (74 checks +     (PostgreSQL (5 WP checks,
                  crawling +       persistence) plugin client)
                  AI vision)
                        |
@@ -45,7 +45,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 | `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Embeds PetDesk logo. |
 | `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
-| `qa_scanner.py` | Site crawler and 57 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 62 total). Integrates with Google PageSpeed Insights API and LanguageTool API (grammar/spelling). Checks include broken links, broken images, Open Graph tags, mixed content, partner-specific validations, and more. |
+| `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API, LanguageTool API (grammar/spelling), and Gemini Vision API (AI image analysis). Checks include broken links, broken images, Open Graph tags, mixed content, AI-powered photo analysis, partner-specific validations, and more. |
 | `wp_api.py` | WordPress API clients for back-end checks. `PetDeskQAPluginClient` (recommended) uses the PetDesk QA Connector plugin with a shared API key. `WordPressAPIClient` (fallback) uses Application Password auth. Both verify plugin/theme updates, timezone, media cleanup, and form notifications. |
 | `petdesk-qa-plugin/` | WordPress plugin directory containing `petdesk-qa-connector.php`. Install on sites to enable automated back-end checks. |
 | `petdesk-qa-plugin.zip` | Zipped plugin ready for upload via WordPress admin > Plugins > Add New > Upload Plugin. |
