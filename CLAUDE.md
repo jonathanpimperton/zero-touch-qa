@@ -188,7 +188,7 @@ The scanner uses the LanguageTool API (free, no API key required) to check visib
 - **Spelling errors** = red FAIL (loses points). Deduplicated by word: each misspelled word appears once with occurrence count and list of pages. Proper nouns, brand names, and capitalized words are automatically filtered out.
 - **Medical/veterinary term filtering** uses pattern matching (medical prefixes like micro-, endo-, cardio- and suffixes like -ectomy, -ology, -itis, -worm) plus a small allowlist for domain terms that don't fit patterns (gumline, rehabilitator, spay, neuter, etc.). This automatically accepts domain-specific terminology.
 - **Grammar issues** = yellow WARNING (no point loss). Deduplicated by message type with occurrence count.
-- Checks ALL pages (not limited to 5) using exponential backoff with retry on rate limits
+- Checks up to 10 pages in parallel (4 concurrent API calls) for speed
 - Automatically retries with increasing delays (1s, 2s, 4s) when rate-limited by LanguageTool API
 
 Rule ID: `GRAM-001` (spelling) / `GRAM-001-G` (grammar), weight 3x, applies to Full Build and Final phases.
@@ -330,8 +330,8 @@ These 6 AI-powered checks reduce human review items from 28 to 22 while improvin
 
 ## Test Sites (Demo Results)
 
-- `thestorybookal.wpenginepowered.com` - Test site with known QA issues. Scored **82/100** (9 failures, 3 warnings, 5 human review).
-- `essentialsfina.wpenginepowered.com` - Site that passed Final QA. Scored **94/100** (2 failures, 3 warnings, 5 human review).
+- `thestorybookal.wpenginepowered.com` - Test site with known QA issues. Scored **74/100** (15 failures, 5 warnings).
+- `essentialsfina.wpenginepowered.com` - Site that passed Final QA. Scored **89/100** (5 failures, 4 warnings).
 
 Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 
@@ -341,7 +341,7 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 2. `SiteCrawler.crawl()` fetches and parses up to 30 pages
 3. For each automated rule, the mapped check function runs against all crawled pages
 4. PageSpeed Insights API is called once for the homepage (if PSI_API_KEY is set) for rendered-page checks; otherwise flagged for human review
-5. LanguageTool API is called for grammar/spelling on up to 5 pages. Spelling = FAIL (deduplicated by word, medical terms filtered by pattern), Grammar = WARN (deduplicated by message)
+5. LanguageTool API is called for grammar/spelling on up to 10 pages (checked in parallel). Spelling = FAIL (deduplicated by word, medical terms filtered by pattern), Grammar = WARN (deduplicated by message)
 6. Broken images, Open Graph tags, and mixed content are checked across all pages
 7. Broken links: 404/500 = FAIL, 403 (bot-blocked) = WARN
 8. Every error includes the exact page URL where it was found
