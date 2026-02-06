@@ -1355,6 +1355,220 @@ def check_form_success_pages(pages: dict, rule: dict) -> list[CheckResult]:
     return results
 
 
+def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
+    """Actually submit forms using Playwright and verify they redirect to success pages.
+
+    This is a more thorough test than check_form_success_pages - it fills forms
+    with test data and submits them to verify the full flow works.
+    """
+    if not PLAYWRIGHT_AVAILABLE:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="Playwright not available. Test form submission manually.",
+        )]
+
+    # Find all contact/inquiry forms (skip search forms, login forms, etc.)
+    forms_to_test = []
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+        for form in page.soup.find_all("form"):
+            # Skip search forms
+            if form.get("role") == "search":
+                continue
+            action = form.get("action", "").lower()
+            if "search" in action or "login" in action or "subscribe" in action:
+                continue
+
+            # Look for contact/inquiry form indicators
+            form_html = str(form).lower()
+            is_contact_form = any(x in form_html for x in [
+                "contact", "inquiry", "appointment", "request", "message",
+                "name", "email", "phone", "comment", "question"
+            ])
+
+            # Check for required fields that suggest it's a contact form
+            inputs = form.find_all(["input", "textarea", "select"])
+            has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
+            has_name = any("name" in i.get("name", "").lower() for i in inputs)
+
+            if is_contact_form and (has_email or has_name):
+                forms_to_test.append({"url": url, "form": form, "inputs": inputs})
+
+    if not forms_to_test:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details="No contact/inquiry forms found to test",
+        )]
+
+    # Test forms using Playwright
+    results = []
+    forms_passed = 0
+    forms_failed = []
+
+    try:
+        playwright_instance = sync_playwright().start()
+        browser = playwright_instance.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+
+        for form_info in forms_to_test[:3]:  # Test up to 3 forms
+            url = form_info["url"]
+            form = form_info["form"]
+            inputs = form_info["inputs"]
+
+            try:
+                context = browser.new_context(user_agent=USER_AGENT)
+                pw_page = context.new_page()
+                pw_page.goto(url, timeout=15000, wait_until="networkidle")
+
+                # Fill form fields with test data
+                test_data = {
+                    "name": "QA Test User",
+                    "first_name": "QA Test",
+                    "last_name": "User",
+                    "email": "qa-test@petdesk-scanner.test",
+                    "phone": "555-000-0000",
+                    "message": "This is an automated QA test submission. Please ignore.",
+                    "comment": "Automated QA test - please ignore",
+                    "comments": "Automated QA test - please ignore",
+                }
+
+                for inp in inputs:
+                    inp_name = inp.get("name", "").lower()
+                    inp_type = inp.get("type", "text").lower()
+                    inp_tag = inp.name
+
+                    if inp_type in ("submit", "hidden", "button"):
+                        continue
+
+                    # Find matching test data
+                    value = None
+                    for key, val in test_data.items():
+                        if key in inp_name:
+                            value = val
+                            break
+
+                    if value:
+                        selector = f'[name="{inp.get("name")}"]'
+                        try:
+                            if inp_tag == "textarea":
+                                pw_page.fill(selector, value)
+                            elif inp_tag == "select":
+                                # Select first non-empty option
+                                pw_page.select_option(selector, index=1)
+                            elif inp_type == "checkbox":
+                                pw_page.check(selector)
+                            elif inp_type == "email":
+                                pw_page.fill(selector, test_data["email"])
+                            else:
+                                pw_page.fill(selector, value)
+                        except Exception:
+                            pass  # Field might not be visible/fillable
+
+                # Find and click submit button
+                submit_btn = None
+                for selector in [
+                    'button[type="submit"]',
+                    'input[type="submit"]',
+                    'button:has-text("Submit")',
+                    'button:has-text("Send")',
+                    'button:has-text("Request")',
+                    '.submit-button',
+                    '#submit',
+                ]:
+                    try:
+                        if pw_page.locator(selector).count() > 0:
+                            submit_btn = selector
+                            break
+                    except Exception:
+                        continue
+
+                if not submit_btn:
+                    forms_failed.append(f"{url} - No submit button found")
+                    context.close()
+                    continue
+
+                # Submit and wait for navigation
+                original_url = pw_page.url
+                try:
+                    pw_page.click(submit_btn)
+                    pw_page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass  # Some forms use AJAX, won't navigate
+
+                # Check result
+                new_url = pw_page.url.lower()
+                page_content = pw_page.content().lower()
+
+                # Success indicators
+                success_indicators = [
+                    "thank" in new_url,
+                    "success" in new_url,
+                    "confirmation" in new_url,
+                    "thank you" in page_content,
+                    "thanks for" in page_content,
+                    "message sent" in page_content,
+                    "we'll be in touch" in page_content,
+                    "received your" in page_content,
+                    "submission successful" in page_content,
+                ]
+
+                # Error indicators
+                error_indicators = [
+                    "error" in page_content and "required" in page_content,
+                    "please fill" in page_content,
+                    "invalid" in page_content,
+                    "failed" in page_content,
+                ]
+
+                if any(success_indicators) and not any(error_indicators):
+                    forms_passed += 1
+                else:
+                    short_url = url.split("//")[-1] if "//" in url else url
+                    forms_failed.append(f"{short_url} - No success page/message after submission")
+
+                context.close()
+
+            except Exception as e:
+                short_url = url.split("//")[-1] if "//" in url else url
+                forms_failed.append(f"{short_url} - Error: {str(e)[:50]}")
+
+        browser.close()
+        playwright_instance.stop()
+
+    except Exception as e:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=f"Could not launch browser for form testing: {str(e)[:100]}",
+        )]
+
+    # Report results
+    total_tested = forms_passed + len(forms_failed)
+
+    if forms_failed:
+        detail = f"{len(forms_failed)} of {total_tested} form(s) failed submission test:\n"
+        detail += "\n".join(f"• {f}" for f in forms_failed)
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=detail,
+            points_lost=rule["weight"],
+        ))
+    else:
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details=f"All {total_tested} form(s) successfully redirect to thank-you/success pages",
+        ))
+
+    return results
+
+
 # =============================================================================
 # PAGESPEED INSIGHTS (RENDERED PAGE CHECKS)
 # =============================================================================
@@ -3732,6 +3946,7 @@ CHECK_FUNCTIONS = {
     "check_map_iframe": check_map_iframe,
     "check_userway_widget": check_userway_widget,
     "check_form_success_pages": check_form_success_pages,
+    "check_form_submission": check_form_submission,
     "check_mobile_responsive": check_mobile_responsive,
     "check_featured_images": check_featured_images,
     "check_contrast": check_contrast,

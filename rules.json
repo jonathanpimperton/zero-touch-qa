@@ -379,11 +379,11 @@
         "full",
         "final"
       ],
-      "check": "Thank you / success pages exist for forms",
+      "check": "Forms submit successfully and redirect to thank-you pages",
       "automated": true,
       "weight": 3,
       "partners": "all",
-      "check_fn": "check_form_success_pages"
+      "check_fn": "check_form_submission"
     },
     {
       "id": "FUNC-005",

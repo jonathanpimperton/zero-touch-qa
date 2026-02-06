@@ -154,7 +154,7 @@ Key functions in `db.py`:
 
 - `search_replace` - Leftover template text (WhiskerFrame, placeholder addresses/phones/emails)
 - `wordpress_backend` - Plugin/theme updates, timezone settings, media library cleanup, form notifications (requires WP_USER + WP_APP_PASSWORD)
-- `functionality` - Broken links (403s reported as warnings, not failures), broken images, mixed content (HTTP on HTTPS), phone/email hyperlinks, form success pages, mobile responsiveness, Lighthouse (requires PSI_API_KEY, otherwise flagged for human review)
+- `functionality` - Broken links (403s reported as warnings, not failures), broken images, mixed content (HTTP on HTTPS), phone/email hyperlinks, form submission testing (Playwright fills and submits forms, verifies redirect to thank-you page), mobile responsiveness, Lighthouse (requires PSI_API_KEY, otherwise flagged for human review)
 - `craftsmanship` - Logo, favicon, contrast/accessibility
 - `content` - H1 tags, alt text, meta titles/descriptions, Open Graph social sharing tags, placeholder text, privacy policy, accessibility statement, Whiskercloud removal
 - `grammar_spelling` - Grammar and spelling errors checked via LanguageTool API (free, open-source)
@@ -204,6 +204,19 @@ Checks that pages have the three key Open Graph meta tags: `og:title`, `og:descr
 Checks for HTTP (insecure) resources loaded on HTTPS pages. This causes browser security warnings ("Not Secure" in the address bar) and can block images/scripts from loading entirely. Scans all `<img>`, `<script>`, `<link>`, `<iframe>`, `<source>`, `<video>`, and `<audio>` tags.
 
 Rule ID: `SEC-001`, weight 3x, applies to all phases.
+
+## Form Submission Testing
+
+The scanner uses Playwright (headless browser) to actually submit contact forms and verify they work:
+
+1. **Finds contact forms** - identifies forms with name/email/phone/message fields (skips search, login, and newsletter forms)
+2. **Fills with test data** - uses obviously fake data: "QA Test User", "qa-test@petdesk-scanner.test", "555-000-0000"
+3. **Submits the form** - clicks the submit button via Playwright
+4. **Verifies success** - checks that the form redirects to a thank-you page or shows a success message
+
+This goes beyond just checking if thank-you pages exist — it verifies the entire form submission flow works end-to-end.
+
+Rule ID: `FUNC-004`, weight 3x, applies to Full Build and Final phases. Requires Playwright; falls back to human review if unavailable.
 
 ## Hybrid JS Rendering (Playwright)
 
