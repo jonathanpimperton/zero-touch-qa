@@ -142,69 +142,45 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     if not wp_client.is_available():
         wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
 
-    # Run checks - group by category for progress reporting
+    # Run ALL checks in parallel for maximum speed
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     all_results = []
-    checks_by_category = {}
-    for rule in auto_rules:
-        cat = rule.get("category", "other")
-        if cat not in checks_by_category:
-            checks_by_category[cat] = []
-        checks_by_category[cat].append(rule)
+    progress("checks", f"Running {len(auto_rules)} checks in parallel...")
 
-    # Define which categories map to which progress steps
-    category_steps = {
-        "grammar_spelling": ("grammar", "Checking grammar & spelling..."),
-        "functionality": ("checks", "Running functionality checks..."),
-        "content": ("checks", "Checking content..."),
-        "craftsmanship": ("checks", "Checking craftsmanship..."),
-        "search_replace": ("checks", "Checking for placeholder text..."),
-        "footer": ("checks", "Checking footer..."),
-        "navigation": ("checks", "Checking navigation..."),
-        "forms": ("checks", "Checking forms..."),
-        "partner_specific": ("checks", "Running partner-specific checks..."),
-    }
+    def run_check(rule):
+        """Run a single check and return results."""
+        fn_name = rule.get("check_fn")
+        if not fn_name or fn_name not in CHECK_FUNCTIONS:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details="Automated check not yet implemented. Verify manually.",
+            )]
 
-    current_step = None
-    for cat, cat_rules in checks_by_category.items():
-        step_info = category_steps.get(cat, ("checks", f"Checking {cat}..."))
-        if step_info[0] != current_step:
-            current_step = step_info[0]
-            progress(current_step, step_info[1])
-
-        for rule in cat_rules:
-            fn_name = rule.get("check_fn")
-            # Special progress for AI and slow checks
-            if fn_name in ("check_image_appropriateness", "check_visual_consistency",
-                          "check_image_cropping", "check_branding_consistency"):
-                progress("ai", f"AI analyzing: {rule.get('check', '')[:40]}...")
-            elif fn_name == "check_grammar_spelling":
-                progress("grammar", "Checking grammar & spelling (all pages)...")
-            elif fn_name == "check_form_submission":
-                progress("checks", "Testing form submissions (Playwright)...")
-            elif fn_name == "check_responsive_viewports":
-                progress("checks", "Testing responsive viewports...")
-
-            if fn_name and fn_name in CHECK_FUNCTIONS:
-                fn = CHECK_FUNCTIONS[fn_name]
-                try:
-                    # WordPress checks need the wp_client parameter
-                    if fn_name in WP_CHECK_FUNCTIONS:
-                        results = fn(pages, rule, wp_client=wp_client)
-                    else:
-                        results = fn(pages, rule)
-                    all_results.extend(results)
-                except Exception as e:
-                    all_results.append(CheckResult(
-                        rule_id=rule["id"], category=rule["category"],
-                        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                        details=f"Automated check encountered an error. Verify manually. ({str(e)})",
-                    ))
+        fn = CHECK_FUNCTIONS[fn_name]
+        try:
+            if fn_name in WP_CHECK_FUNCTIONS:
+                return fn(pages, rule, wp_client=wp_client)
             else:
-                all_results.append(CheckResult(
-                    rule_id=rule["id"], category=rule["category"],
-                    check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                    details="Automated check not yet implemented. Verify manually.",
-                ))
+                return fn(pages, rule)
+        except Exception as e:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details=f"Automated check encountered an error. Verify manually. ({str(e)})",
+            )]
+
+    # Run all checks in parallel (8 workers balances speed vs resource usage)
+    completed = 0
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(run_check, rule): rule for rule in auto_rules}
+        for future in as_completed(futures):
+            results = future.result()
+            all_results.extend(results)
+            completed += 1
+            if completed % 10 == 0:
+                progress("checks", f"Completed {completed}/{len(auto_rules)} checks...")
 
     for rule in human_rules:
         all_results.append(CheckResult(
