@@ -98,6 +98,7 @@ class ScanReport:
     phase: str
     scan_time: str
     scan_id: str = ""
+    report_filename: str = ""  # Set by app.py before generating HTML
     pages_scanned: int = 0
     total_checks: int = 0
     passed: int = 0
@@ -1710,15 +1711,60 @@ def _should_skip_spelling(word: str) -> bool:
     return False
 
 
+def _languagetool_request_with_retry(text: str, max_retries: int = 3) -> dict | None:
+    """Make a LanguageTool API request with exponential backoff retry.
+
+    Returns the JSON response dict, or None if all retries failed.
+    """
+    base_delay = 1.0  # Start with 1 second delay
+
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(
+                _LANGUAGETOOL_URL,
+                data={"text": text, "language": "en-US"},
+                timeout=30,
+            )
+
+            if resp.status_code == 200:
+                return resp.json()
+            elif resp.status_code == 429:  # Rate limited
+                delay = base_delay * (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                print(f"    [Grammar] Rate limited, waiting {delay}s before retry...")
+                time.sleep(delay)
+                continue
+            else:
+                # Other error, retry with backoff
+                delay = base_delay * (2 ** attempt)
+                time.sleep(delay)
+                continue
+
+        except requests.Timeout:
+            delay = base_delay * (2 ** attempt)
+            print(f"    [Grammar] Timeout, waiting {delay}s before retry...")
+            time.sleep(delay)
+            continue
+        except Exception:
+            delay = base_delay * (2 ** attempt)
+            time.sleep(delay)
+            continue
+
+    return None
+
+
 def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
     """Check visible page text for grammar and spelling errors using LanguageTool API.
-    Returns separate results for spelling (FAIL) and grammar (WARN)."""
+
+    Checks ALL pages with exponential backoff retry for rate limiting.
+    Returns separate results for spelling (FAIL) and grammar (WARN).
+    """
     spelling_issues = []
     grammar_issues = []
     pages_checked = 0
-    max_pages = 5
+    pages_failed = 0
 
-    for url, page in list(pages.items())[:max_pages]:
+    # Check ALL pages (no limit)
+    for url, page in pages.items():
         if not page.soup:
             continue
 
@@ -1732,73 +1778,71 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
 
         text = text[:10000]
 
-        try:
-            resp = requests.post(
-                _LANGUAGETOOL_URL,
-                data={"text": text, "language": "en-US"},
-                timeout=30,
-            )
-            if resp.status_code != 200:
+        # Use retry wrapper with exponential backoff
+        data = _languagetool_request_with_retry(text)
+
+        if data is None:
+            pages_failed += 1
+            continue
+
+        matches = data.get("matches", [])
+        pages_checked += 1
+
+        noisy_rules = {"WHITESPACE_RULE", "COMMA_PARENTHESIS_WHITESPACE",
+                       "UPPERCASE_SENTENCE_START", "CONSECUTIVE_SPACES",
+                       "EN_QUOTES", "DASH_RULE", "MULTIPLICATION_SIGN",
+                       "ELLIPSIS", "TYPOGRAPHICAL_APOSTROPHE"}
+
+        for m in matches:
+            issue_type = m.get("rule", {}).get("issueType", "")
+            rule_id_lt = m.get("rule", {}).get("id", "")
+            if rule_id_lt in noisy_rules:
                 continue
 
-            data = resp.json()
-            matches = data.get("matches", [])
-            pages_checked += 1
+            context_obj = m.get("context", {})
+            context_text = context_obj.get("text", "")
+            offset = context_obj.get("offset", 0)
+            length = context_obj.get("length", 0)
+            # Extract the flagged word
+            flagged_word = context_text[offset:offset + length] if length else ""
 
-            noisy_rules = {"WHITESPACE_RULE", "COMMA_PARENTHESIS_WHITESPACE",
-                           "UPPERCASE_SENTENCE_START", "CONSECUTIVE_SPACES",
-                           "EN_QUOTES", "DASH_RULE", "MULTIPLICATION_SIGN",
-                           "ELLIPSIS", "TYPOGRAPHICAL_APOSTROPHE"}
+            is_spelling = ("spell" in issue_type.lower() or
+                           "misspelling" in issue_type.lower())
 
-            for m in matches:
-                issue_type = m.get("rule", {}).get("issueType", "")
-                rule_id_lt = m.get("rule", {}).get("id", "")
-                if rule_id_lt in noisy_rules:
-                    continue
+            # Skip proper nouns, brand names, and medical/vet terms
+            if is_spelling and _should_skip_spelling(flagged_word):
+                continue
 
-                context_obj = m.get("context", {})
-                context_text = context_obj.get("text", "")
-                offset = context_obj.get("offset", 0)
-                length = context_obj.get("length", 0)
-                # Extract the flagged word
-                flagged_word = context_text[offset:offset + length] if length else ""
+            message = m.get("message", "")
+            replacements = [r["value"] for r in m.get("replacements", [])[:2]]
+            suggestion = f" -> {', '.join(replacements)}" if replacements else ""
 
-                is_spelling = ("spell" in issue_type.lower() or
-                               "misspelling" in issue_type.lower())
+            issue = {
+                "url": url,
+                "flagged": flagged_word,
+                "message": message,
+                "context": context_text[:100],
+                "suggestion": suggestion,
+                "type": issue_type,
+            }
 
-                # Skip proper nouns, brand names, and medical/vet terms
-                if is_spelling and _should_skip_spelling(flagged_word):
-                    continue
-
-                message = m.get("message", "")
-                replacements = [r["value"] for r in m.get("replacements", [])[:2]]
-                suggestion = f" -> {', '.join(replacements)}" if replacements else ""
-
-                issue = {
-                    "url": url,
-                    "flagged": flagged_word,
-                    "message": message,
-                    "context": context_text[:100],
-                    "suggestion": suggestion,
-                    "type": issue_type,
-                }
-
-                if is_spelling:
-                    spelling_issues.append(issue)
-                else:
-                    grammar_issues.append(issue)
-
-        except Exception:
-            continue
+            if is_spelling:
+                spelling_issues.append(issue)
+            else:
+                grammar_issues.append(issue)
 
     if not pages_checked:
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-            details="Could not reach LanguageTool API. Check grammar and spelling manually.",
+            details=f"Could not reach LanguageTool API after retries ({pages_failed} page(s) failed). "
+                    "Check grammar and spelling manually.",
         )]
 
     results = []
+
+    # Note about any pages that failed despite retries
+    failed_note = f" ({pages_failed} page(s) failed API checks)" if pages_failed > 0 else ""
 
     # --- Spelling result (FAIL if issues found) ---
     # Deduplicate: group by flagged word, show count and pages
@@ -1832,7 +1876,7 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
             check="Spelling errors in visible page content",
             status="FAIL", weight=rule["weight"],
             details=f"{len(word_groups)} unique misspelled word(s) ({len(spelling_issues)} total "
-                    f"occurrences) across {pages_checked} page(s):\n{detail}",
+                    f"occurrences) across {pages_checked} page(s){failed_note}:\n{detail}",
             points_lost=rule["weight"],
         ))
     else:
@@ -1840,7 +1884,7 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
             rule_id=rule["id"], category=rule["category"],
             check="Spelling errors in visible page content",
             status="PASS", weight=rule["weight"],
-            details=f"No spelling errors found across {pages_checked} page(s)",
+            details=f"No spelling errors found across {pages_checked} page(s){failed_note}",
         ))
 
     # --- Grammar result (WARN only, never FAIL) ---
@@ -1875,7 +1919,7 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
             check="Grammar issues in visible page content",
             status="WARN", weight=rule["weight"],
             details=f"{len(msg_groups)} unique grammar issue(s) ({len(grammar_issues)} total) "
-                    f"across {pages_checked} page(s):\n{detail}",
+                    f"across {pages_checked} page(s){failed_note}:\n{detail}",
             points_lost=0,
         ))
 

@@ -505,9 +505,11 @@ HOME_PAGE = """<!DOCTYPE html>
             const steps = [
                 { text: 'Connecting to site...', icon: '🔗' },
                 { text: 'Crawling pages...', icon: '🕷️' },
+                { text: 'Rendering JS pages (Playwright)...', icon: '🌐' },
                 { text: 'Running QA checks...', icon: '✓' },
                 { text: 'Checking WordPress backend...', icon: '🔐' },
-                { text: 'Checking grammar & spelling...', icon: '📝' },
+                { text: 'Checking grammar & spelling (all pages)...', icon: '📝' },
+                { text: 'AI analyzing images (Gemini Vision)...', icon: '🤖' },
                 { text: 'Generating report...', icon: '📊' },
             ];
             let currentStep = 0;
@@ -522,7 +524,7 @@ HOME_PAGE = """<!DOCTYPE html>
                 }
             }
             showStep();
-            const stepInterval = setInterval(showStep, 2500);
+            const stepInterval = setInterval(showStep, 2000);  // Faster interval with more steps
 
             try {
                 const resp = await fetch('/api/scan', {
@@ -1433,6 +1435,8 @@ def api_scan():
         report_filename = f"{safe_name}_{timestamp}.html"
         report_path = os.path.join(REPORTS_DIR, report_filename)
 
+        # Set filename on report so it's available in the generated HTML for API calls
+        report.report_filename = report_filename
         html_report = generate_html_report(report)
         json_filename = f"{safe_name}_{timestamp}.json"
         json_report_data = generate_json_report(report)
@@ -1546,6 +1550,57 @@ def admin_clear_history():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/review", methods=["POST"])
+def api_save_review():
+    """Save a human review decision for a report item.
+
+    Expects JSON: {
+        report_filename: string (e.g., 'scan_QA-0001_20260206.html'),
+        item_index: int (0-based index of the human review item),
+        rule_id: string (e.g., 'HUMAN-001'),
+        decision: string ('pass', 'fail', or 'na'),
+        comments: string (optional reviewer comments)
+    }
+    """
+    from db import db_save_human_review
+
+    data = request.get_json() or {}
+    report_filename = data.get("report_filename", "").strip()
+    item_index = data.get("item_index")
+    rule_id = data.get("rule_id", "").strip()
+    decision = data.get("decision", "").strip().lower()
+    comments = data.get("comments", "").strip()
+
+    # Validation
+    if not report_filename:
+        return jsonify({"success": False, "error": "report_filename is required"}), 400
+    if item_index is None or not isinstance(item_index, int):
+        return jsonify({"success": False, "error": "item_index must be an integer"}), 400
+    if decision not in ("pass", "fail", "na"):
+        return jsonify({"success": False, "error": "decision must be 'pass', 'fail', or 'na'"}), 400
+
+    success = db_save_human_review(report_filename, item_index, rule_id, decision, comments)
+
+    if success:
+        return jsonify({"success": True, "message": "Review saved"})
+    else:
+        return jsonify({"success": False, "error": "Failed to save review (database unavailable)"}), 500
+
+
+@app.route("/api/reviews/<path:report_filename>", methods=["GET"])
+def api_get_reviews(report_filename):
+    """Get all saved human review decisions for a report."""
+    from db import db_load_human_reviews
+
+    reviews = db_load_human_reviews(report_filename)
+
+    if reviews is None:
+        # DB not available, return empty
+        return jsonify({"success": True, "reviews": []})
+
+    return jsonify({"success": True, "reviews": reviews})
+
+
 # ---------------------------------------------------------------------------
 # Routes - Wrike Webhook
 # ---------------------------------------------------------------------------
@@ -1617,6 +1672,7 @@ def _process_wrike_task(task_id: str):
         safe_name = site_url.replace("https://", "").replace("http://", "").replace("/", "_").replace(".", "-")
         report_filename = f"{safe_name}_{timestamp}.html"
         report_path = os.path.join(REPORTS_DIR, report_filename)
+        report.report_filename = report_filename
         html_report = generate_html_report(report)
         json_report_data = generate_json_report(report)
 

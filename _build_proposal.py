@@ -146,7 +146,7 @@ def main():
                 <div class="metric-label">Time Savings</div>
             </div>
             <div class="metric-box">
-                <div class="metric-value">89</div>
+                <div class="metric-value">100</div>
                 <div class="metric-label">Automated Rules</div>
             </div>
             <div class="metric-box">
@@ -172,13 +172,13 @@ def main():
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td style="padding: 5px 10px;">Template Text / Search-Replace</td><td style="padding: 5px 10px;">11</td></tr>
-                    <tr><td style="padding: 5px 10px;">Links, Images, Mixed Content</td><td style="padding: 5px 10px;">5</td></tr>
-                    <tr><td style="padding: 5px 10px;">Footer &amp; Navigation</td><td style="padding: 5px 10px;">7</td></tr>
-                    <tr><td style="padding: 5px 10px;">SEO &amp; Social Sharing</td><td style="padding: 5px 10px;">8</td></tr>
+                    <tr><td style="padding: 5px 10px;">Template Text / Search-Replace</td><td style="padding: 5px 10px;">20</td></tr>
+                    <tr><td style="padding: 5px 10px;">Functionality (links, forms, phones)</td><td style="padding: 5px 10px;">10</td></tr>
+                    <tr><td style="padding: 5px 10px;">Content, SEO &amp; Metadata</td><td style="padding: 5px 10px;">15</td></tr>
+                    <tr><td style="padding: 5px 10px;">Footer, Navigation &amp; Craftsmanship</td><td style="padding: 5px 10px;">10</td></tr>
                     <tr><td style="padding: 5px 10px;">WordPress Backend (via plugin)</td><td style="padding: 5px 10px;">5</td></tr>
-                    <tr><td style="padding: 5px 10px;">Grammar &amp; Spelling</td><td style="padding: 5px 10px;">1</td></tr>
-                    <tr><td style="padding: 5px 10px;">Partner-Specific Rules</td><td style="padding: 5px 10px;">52</td></tr>
+                    <tr><td style="padding: 5px 10px;">Grammar, Spelling &amp; AI Image Analysis</td><td style="padding: 5px 10px;">2</td></tr>
+                    <tr><td style="padding: 5px 10px;">Partner-Specific Rules</td><td style="padding: 5px 10px;">38</td></tr>
                 </tbody>
             </table>
             <div>
@@ -192,8 +192,11 @@ def main():
                         <li>Branding consistency (fonts, button colors)</li>
                     </ul>
                 </div>
-                <div style="background: #DDEE91; border-left: 3px solid #84cc16; padding: 8px 12px; border-radius: 4px;">
+                <div style="background: #DDEE91; border-left: 3px solid #84cc16; padding: 8px 12px; border-radius: 4px; margin-bottom: 8px;">
                     <p style="font-size: 10px; line-height: 1.4;"><strong>Result:</strong> 100 automated rules. Only 22 items need human judgment.</p>
+                </div>
+                <div style="background: #fff7ed; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 4px;">
+                    <p style="font-size: 10px; line-height: 1.4;"><strong>Why humans are still needed:</strong> Brand tone, visual balance, layout choices, and client-specific preferences require subjective judgment that automation cannot provide.</p>
                 </div>
             </div>
         </div>
@@ -304,7 +307,7 @@ def main():
                 </div>
                 <h3 style="text-align: center; margin-top: 16px;">Test Site</h3>
                 <p style="text-align: center; font-size: 12px; color: #6b7280;">thestorybookal</p>
-                <p style="text-align: center; font-size: 13px; margin-top: 8px;">9 failures, 4 warnings</p>
+                <p style="text-align: center; font-size: 13px; margin-top: 8px;">9 failures, 3 warnings</p>
             </div>
             <div class="score-card">
                 <div class="score-ring" style="background: conic-gradient(#5820BA 0% 94%, #e5e7eb 94% 100%);">
@@ -507,7 +510,7 @@ def main():
                 <div style="font-size: 9px; color: #6b7280;">Automated</div>
             </div>
             <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 4px; padding: 8px; text-align: center;">
-                <div style="font-size: 18px; font-weight: 700; color: #d97706;">25</div>
+                <div style="font-size: 18px; font-weight: 700; color: #d97706;">22</div>
                 <div style="font-size: 9px; color: #6b7280;">Human Review</div>
             </div>
             <div style="background: #ecfeff; border: 1px solid #cffafe; border-radius: 4px; padding: 8px; text-align: center;">
@@ -553,17 +556,21 @@ def main():
             </div>
             <div>
                 <div style="background: #2DCCE8; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 600; font-size: 13px;">Phase 2 Enhancements</div>
-                <div class="card" style="margin-bottom: 10px; font-size: 12px;">
-                    <h3 style="font-size: 13px;">Wrike Integration</h3>
-                    <p style="line-height: 1.5;">Auto-trigger scans when Wrike tasks move to QA, attach PDF reports to the task</p>
+                <div class="card" style="margin-bottom: 8px; font-size: 12px; padding: 10px;">
+                    <h3 style="font-size: 12px;">Google Workspace SSO</h3>
+                    <p style="line-height: 1.4; font-size: 11px;">Require PetDesk Google login to access scanner &mdash; integrates with existing identity management</p>
                 </div>
-                <div class="card" style="margin-bottom: 10px; font-size: 12px;">
-                    <h3 style="font-size: 13px;">Analytics Dashboard</h3>
-                    <p style="line-height: 1.5;">Build trending reports from PostgreSQL scan history &mdash; pass rates, failure patterns, partner comparisons</p>
+                <div class="card" style="margin-bottom: 8px; font-size: 12px; padding: 10px;">
+                    <h3 style="font-size: 12px;">Wrike Integration</h3>
+                    <p style="line-height: 1.4; font-size: 11px;">Auto-trigger scans when Wrike tasks move to QA, attach PDF reports to the task</p>
                 </div>
-                <div class="card" style="font-size: 12px;">
-                    <h3 style="font-size: 13px;">More Partner Templates</h3>
-                    <p style="line-height: 1.5;">Expand partner-specific rules as QA team identifies unique requirements</p>
+                <div class="card" style="margin-bottom: 8px; font-size: 12px; padding: 10px;">
+                    <h3 style="font-size: 12px;">Analytics Dashboard</h3>
+                    <p style="line-height: 1.4; font-size: 11px;">Trending reports from scan history &mdash; pass rates, failure patterns, partner comparisons</p>
+                </div>
+                <div class="card" style="font-size: 12px; padding: 10px;">
+                    <h3 style="font-size: 12px;">More Partner Templates</h3>
+                    <p style="line-height: 1.4; font-size: 11px;">Expand partner-specific rules as QA team identifies unique requirements</p>
                 </div>
             </div>
         </div>

@@ -976,8 +976,34 @@ var baseScore = {int(report.score)};
 var circumference = 2 * Math.PI * 54;
 var totalHumanItems = {human_review};
 var humanStatuses = {{}};
+var reportFilename = '{getattr(report, "report_filename", "")}';
+var ruleIds = {json.dumps([r.rule_id for r in report.results if r.status == "HUMAN_REVIEW"])};
+
 // Initialize all human review items as null (not yet reviewed)
 for (var i = 0; i < totalHumanItems; i++) {{ humanStatuses[i] = null; }}
+
+// Save review to server API
+function saveReview(idx, status) {{
+    if (!reportFilename) return; // No filename, can't save
+    var card = document.getElementById('review-' + idx);
+    var comments = card.querySelector('.review-comments');
+    var commentsText = comments ? comments.value : '';
+    var ruleId = ruleIds[idx] || '';
+
+    fetch('/api/review', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{
+            report_filename: reportFilename,
+            item_index: idx,
+            rule_id: ruleId,
+            decision: status,
+            comments: commentsText
+        }})
+    }}).catch(function(err) {{
+        console.log('Could not save review:', err);
+    }});
+}}
 
 function setReview(idx, status) {{
     var card = document.getElementById('review-' + idx);
@@ -995,6 +1021,7 @@ function setReview(idx, status) {{
     }}
     humanStatuses[idx] = status;
     recalcScore();
+    saveReview(idx, status);  // Persist to server
 }}
 
 function recalcScore() {{
@@ -1107,6 +1134,82 @@ function copyReportUrl() {{
         label.textContent = 'Copied!';
         setTimeout(function() {{ label.textContent = 'Copy Report URL'; }}, 2000);
     }}
+}}
+
+// Load saved reviews on page load
+function loadSavedReviews() {{
+    if (!reportFilename || window.location.protocol === 'file:') return;
+
+    fetch('/api/reviews/' + encodeURIComponent(reportFilename))
+        .then(function(resp) {{ return resp.json(); }})
+        .then(function(data) {{
+            if (data.success && data.reviews && data.reviews.length > 0) {{
+                data.reviews.forEach(function(r) {{
+                    var idx = r.item_index;
+                    var decision = r.decision;
+                    var comments = r.comments;
+
+                    // Apply the saved decision (without re-saving to API)
+                    var card = document.getElementById('review-' + idx);
+                    if (!card) return;
+
+                    var btns = card.querySelectorAll('.review-btn');
+                    btns.forEach(function(b) {{ b.classList.remove('active'); }});
+                    card.classList.remove('reviewed-pass', 'reviewed-fail');
+
+                    if (decision === 'pass') {{
+                        card.querySelector('.review-btn-pass').classList.add('active');
+                        card.classList.add('reviewed-pass');
+                    }} else if (decision === 'fail') {{
+                        card.querySelector('.review-btn-fail').classList.add('active');
+                        card.classList.add('reviewed-fail');
+                    }} else if (decision === 'na') {{
+                        card.querySelector('.review-btn-na').classList.add('active');
+                    }}
+
+                    humanStatuses[idx] = decision;
+
+                    // Restore comments
+                    if (comments) {{
+                        var textarea = card.querySelector('.review-comments');
+                        if (textarea) textarea.value = comments;
+                    }}
+                }});
+
+                // Recalculate score based on loaded decisions
+                recalcScore();
+            }}
+        }})
+        .catch(function(err) {{
+            console.log('Could not load saved reviews:', err);
+        }});
+}}
+
+// Save comments when user leaves the textarea
+function setupCommentSaving() {{
+    document.querySelectorAll('.review-comments').forEach(function(textarea) {{
+        var card = textarea.closest('.review-card');
+        if (!card) return;
+        var idx = parseInt(card.id.replace('review-', ''));
+
+        textarea.addEventListener('blur', function() {{
+            // Only save if there's a decision already
+            if (humanStatuses[idx] !== null && reportFilename) {{
+                saveReview(idx, humanStatuses[idx]);
+            }}
+        }});
+    }});
+}}
+
+// Auto-load saved reviews when page loads
+if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', function() {{
+        loadSavedReviews();
+        setupCommentSaving();
+    }});
+}} else {{
+    loadSavedReviews();
+    setupCommentSaving();
 }}
 </script>
 </body>

@@ -165,6 +165,15 @@ Key functions in `db.py`:
 - `partner_specific` - Partner-specific rules for Western, Heartland, United, Rarebreed, EverVet, Encore, AmeriVet (career widgets, layout requirements, naming conventions)
 - `human_review` - Brand tone, image appropriateness, visual consistency (cannot be automated). Report provides Pass/Fail/N/A buttons and a comments field for each item. Human FAIL decisions lower the score (by the item's weight); PASS keeps it unchanged. Human review items only appear in the dedicated checklist section, not duplicated in category tables.
 
+## Human Review Persistence
+
+Human review decisions (Pass/Fail/N/A + comments) are automatically saved to the database via the `/api/review` endpoint. When a report is reopened, saved decisions are loaded and the score recalculated. This allows reviewers to:
+- Close a report and return later without losing work
+- Share reports with other team members who can see completed reviews
+- Build an audit trail of who reviewed what and when
+
+Database table: `human_reviews` stores report_filename, item_index, rule_id, decision, comments, and reviewed_at timestamp. Falls back gracefully when viewing reports as local files (decisions update in-browser but can't persist).
+
 ## Grammar & Spelling Checks
 
 The scanner uses the LanguageTool API (free, no API key required) to check visible page text for grammar and spelling errors. It:

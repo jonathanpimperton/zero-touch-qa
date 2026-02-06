@@ -78,6 +78,20 @@ def init_db():
                         ON scans(scan_time DESC);
                     CREATE INDEX IF NOT EXISTS idx_scans_site_url
                         ON scans(site_url);
+
+                    CREATE TABLE IF NOT EXISTS human_reviews (
+                        id              SERIAL PRIMARY KEY,
+                        report_filename VARCHAR(255) NOT NULL,
+                        rule_id         VARCHAR(50) NOT NULL,
+                        item_index      INTEGER NOT NULL,
+                        decision        VARCHAR(10) NOT NULL,  -- 'pass', 'fail', 'na'
+                        comments        TEXT DEFAULT '',
+                        reviewed_at     TIMESTAMP DEFAULT NOW(),
+                        UNIQUE(report_filename, item_index)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_human_reviews_filename
+                        ON human_reviews(report_filename);
                 """)
         print("[DB] Database tables initialized")
     except Exception as e:
@@ -305,3 +319,77 @@ def db_seed_from_filesystem(reports_dir: str):
                 print(f"[DB] Seeded scan_id_map with {len(mapping)} entries, sequence at {max_num}")
         except Exception as e:
             print(f"[DB] Could not seed scan_id_map: {e}")
+
+
+def db_save_human_review(report_filename: str, item_index: int, rule_id: str,
+                          decision: str, comments: str = "") -> bool:
+    """Save a human review decision for a specific item in a report.
+
+    Args:
+        report_filename: The report file (e.g., 'scan_QA-0001_20260206.html')
+        item_index: The index of the human review item (0-based)
+        rule_id: The rule ID (e.g., 'HUMAN-001')
+        decision: 'pass', 'fail', or 'na'
+        comments: Optional reviewer comments
+
+    Returns:
+        True if saved successfully, False otherwise.
+    """
+    if not is_db_available():
+        return False
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO human_reviews
+                        (report_filename, item_index, rule_id, decision, comments, reviewed_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (report_filename, item_index)
+                    DO UPDATE SET
+                        decision = EXCLUDED.decision,
+                        comments = EXCLUDED.comments,
+                        reviewed_at = NOW()
+                """, (report_filename, item_index, rule_id, decision, comments))
+        return True
+    except Exception as e:
+        print(f"[DB] Error saving human review: {e}")
+        return False
+
+
+def db_load_human_reviews(report_filename: str) -> list[dict] | None:
+    """Load all human review decisions for a report.
+
+    Returns:
+        List of dicts with keys: item_index, rule_id, decision, comments, reviewed_at
+        Returns None if DB unavailable, empty list if no reviews saved.
+    """
+    if not is_db_available():
+        return None
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT item_index, rule_id, decision, comments, reviewed_at
+                    FROM human_reviews
+                    WHERE report_filename = %s
+                    ORDER BY item_index
+                """, (report_filename,))
+                rows = cur.fetchall()
+
+        return [
+            {
+                "item_index": row["item_index"],
+                "rule_id": row["rule_id"],
+                "decision": row["decision"],
+                "comments": row["comments"] or "",
+                "reviewed_at": row["reviewed_at"].isoformat()
+                    if hasattr(row["reviewed_at"], 'isoformat')
+                    else str(row["reviewed_at"]),
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        print(f"[DB] Error loading human reviews: {e}")
+        return None
