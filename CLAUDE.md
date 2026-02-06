@@ -143,6 +143,8 @@ Key functions in `db.py`:
 | `db_load_scan_history()` | Loads all scans for the history page. |
 | `db_get_report(filename, type)` | Fetches HTML or JSON report by filename. |
 | `db_seed_from_filesystem(reports_dir)` | One-time import of existing files into DB. |
+| `db_save_human_review(filename, idx, rule_id, decision, comments)` | Saves a human review decision. |
+| `db_load_human_reviews(filename)` | Loads all human reviews for a report. |
 
 ## Partners and Phases
 
@@ -172,7 +174,11 @@ Human review decisions (Pass/Fail/N/A + comments) are automatically saved to the
 - Share reports with other team members who can see completed reviews
 - Build an audit trail of who reviewed what and when
 
-Database table: `human_reviews` stores report_filename, item_index, rule_id, decision, comments, and reviewed_at timestamp. Falls back gracefully when viewing reports as local files (decisions update in-browser but can't persist).
+Database table: `human_reviews` stores report_filename, item_index, rule_id, decision, comments, and reviewed_at timestamp. API endpoints:
+- `POST /api/review` - saves a single review decision
+- `GET /api/reviews/<filename>` - loads all saved reviews for a report
+
+Falls back gracefully when viewing reports as local files (decisions update in-browser but can't persist).
 
 ## Grammar & Spelling Checks
 
@@ -182,7 +188,8 @@ The scanner uses the LanguageTool API (free, no API key required) to check visib
 - **Spelling errors** = red FAIL (loses points). Deduplicated by word: each misspelled word appears once with occurrence count and list of pages. Proper nouns, brand names, and capitalized words are automatically filtered out.
 - **Medical/veterinary term filtering** uses pattern matching (medical prefixes like micro-, endo-, cardio- and suffixes like -ectomy, -ology, -itis, -worm) instead of a manual allowlist. This automatically accepts domain-specific terminology without needing to add individual words.
 - **Grammar issues** = yellow WARNING (no point loss). Deduplicated by message type with occurrence count.
-- Checks up to 5 pages per scan to stay within API rate limits
+- Checks ALL pages (not limited to 5) using exponential backoff with retry on rate limits
+- Automatically retries with increasing delays (1s, 2s, 4s) when rate-limited by LanguageTool API
 
 Rule ID: `GRAM-001` (spelling) / `GRAM-001-G` (grammar), weight 3x, applies to Full Build and Final phases.
 
@@ -210,9 +217,10 @@ Rule ID: `SEC-001`, weight 3x, applies to all phases.
 The scanner uses Playwright (headless browser) to actually submit contact forms and verify they work:
 
 1. **Finds contact forms** - identifies forms with name/email/phone/message fields (skips search, login, and newsletter forms)
-2. **Fills with test data** - uses obviously fake data: "QA Test User", "qa-test@petdesk-scanner.test", "555-000-0000"
-3. **Submits the form** - clicks the submit button via Playwright
-4. **Verifies success** - checks that the form redirects to a thank-you page or shows a success message
+2. **Detects untestable forms** - automatically skips forms with CAPTCHA (reCAPTCHA, hCaptcha, Turnstile) or complex forms (>10 required fields), flagging them for manual testing
+3. **Fills with test data** - uses obviously fake data: "QA Test User", "qa-test@petdesk-scanner.test", "555-000-0000"
+4. **Submits the form** - clicks the submit button via Playwright
+5. **Verifies success** - checks for redirect to thank-you page, success message, or AJAX confirmation (waits 2 seconds for dynamic responses)
 
 This goes beyond just checking if thank-you pages exist — it verifies the entire form submission flow works end-to-end.
 
@@ -307,17 +315,18 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 
 ## AI-Powered Checks
 
-The scanner uses Gemini Vision API (primary) or Claude Vision API (fallback) for automated checks that previously required human judgment:
+The scanner uses Gemini Vision API (primary) or Claude Vision API (fallback) for automated checks that previously required human judgment. These are prefixed with `AI-*` rule IDs:
 
-| Check | What It Does |
-|-------|--------------|
-| Image Appropriateness | Analyzes images on sensitive pages (euthanasia, end-of-life) for inappropriate content |
-| Visual Consistency | Takes homepage screenshot and checks for alignment, spacing, and color consistency issues |
-| Responsive Viewports | Uses Playwright to test site at desktop (1920px), tablet (768px), and mobile (375px) |
-| Map Location | Geocodes clinic address and verifies Google Maps iframe coordinates match |
-| Branding Consistency | Checks for default Divi fonts and inconsistent button colors |
+| Rule ID | Check | What It Does |
+|---------|-------|--------------|
+| AI-001 | Image Appropriateness | Analyzes images on sensitive pages (euthanasia, end-of-life) for inappropriate content |
+| AI-002 | Visual Consistency | Takes homepage screenshot and checks for alignment, spacing, and color consistency issues |
+| AI-003 | Branding Consistency | Checks for default Divi fonts and inconsistent button colors |
+| AI-004 | Image Cropping | Detects awkwardly cropped images (cut-off faces, partial logos) |
+| AI-005 | Responsive Viewports | Uses Playwright to test site at desktop (1920px), tablet (768px), and mobile (375px) |
+| AI-006 | Map Location | Geocodes clinic address and verifies Google Maps iframe coordinates match |
 
-These checks reduce human review items from 33 to 25 while improving consistency and speed.
+These 6 AI-powered checks reduce human review items from 28 to 22 while improving consistency and speed.
 
 ## Test Sites (Demo Results)
 
@@ -383,7 +392,7 @@ The web interface features:
 - **Consistent headers** across all pages with PetDesk branding and subtle glow effects
 - **Animated transitions**: Fade-in on page load, smooth hover states
 - **Form icons**: SVG icons next to URL, Partner, and Phase fields
-- **Step-by-step scanning progress**: Shows current phase with emojis (🔗 Connecting → 🕷️ Crawling → ✓ Checking → 📝 Grammar → 📊 Report)
+- **Step-by-step scanning progress**: Shows current phase with emojis (🔗 Connecting → 🕷️ Crawling → 🌐 Rendering JS (Playwright) → ✓ Checking → 🔐 WordPress Backend → 📝 Grammar (all pages) → 🤖 AI Vision → 📊 Report)
 - **Score rings**: Circular colored badges in history (green/yellow/red based on score)
 - **Scan ID badges**: Monospace font with gradient background for easy identification
 
