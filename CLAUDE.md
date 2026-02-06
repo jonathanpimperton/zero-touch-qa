@@ -35,6 +35,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 | `/reports/<filename>` | View a specific scan report (served from database or filesystem). |
 | `/api/scan` | API endpoint (POST) for running scans programmatically. |
 | `/webhook/wrike` | Wrike webhook endpoint for automated scan triggering (future). |
+| `/admin/clear-history` | Admin endpoint (POST) to clear all scan history. Requires `ADMIN_KEY` env var and `X-Admin-Key` header. |
 
 ## Files
 
@@ -277,6 +278,7 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 - `PETDESK_QA_API_KEY` - Shared API key for the PetDesk QA Connector plugin. Must match the key in the plugin. Default is `petdesk-qa-2026-hackathon-key` for demo purposes. Change in production.
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
+- `ADMIN_KEY` - Secret key for admin endpoints like `/admin/clear-history`. Set via Render dashboard or `.env`.
 
 ## Test Sites (Demo Results)
 
