@@ -142,11 +142,21 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     if not wp_client.is_available():
         wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
 
-    # Run ALL checks in parallel for maximum speed
+    # Run checks: fast checks in parallel, Playwright checks sequentially
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     all_results = []
-    progress("checks", f"Running {len(auto_rules)} checks in parallel...")
+
+    # Playwright-based checks must run sequentially (one browser at a time)
+    PLAYWRIGHT_CHECKS = {
+        "check_form_submission", "check_responsive_viewports", "check_map_location",
+        "check_visual_consistency", "check_image_appropriateness",
+        "check_branding_consistency", "check_image_cropping",
+    }
+
+    # Separate rules into parallel-safe and sequential
+    parallel_rules = [r for r in auto_rules if r.get("check_fn") not in PLAYWRIGHT_CHECKS]
+    sequential_rules = [r for r in auto_rules if r.get("check_fn") in PLAYWRIGHT_CHECKS]
 
     def run_check(rule):
         """Run a single check and return results."""
@@ -171,16 +181,19 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
                 details=f"Automated check encountered an error. Verify manually. ({str(e)})",
             )]
 
-    # Run all checks in parallel (8 workers balances speed vs resource usage)
-    completed = 0
+    # 1. Run fast checks in parallel (no Playwright)
+    progress("checks", f"Running {len(parallel_rules)} fast checks in parallel...")
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(run_check, rule): rule for rule in auto_rules}
+        futures = {executor.submit(run_check, rule): rule for rule in parallel_rules}
         for future in as_completed(futures):
-            results = future.result()
-            all_results.extend(results)
-            completed += 1
-            if completed % 10 == 0:
-                progress("checks", f"Completed {completed}/{len(auto_rules)} checks...")
+            all_results.extend(future.result())
+
+    # 2. Run Playwright checks sequentially (one browser at a time)
+    for i, rule in enumerate(sequential_rules, 1):
+        fn_name = rule.get("check_fn", "")
+        short_name = fn_name.replace("check_", "").replace("_", " ").title()
+        progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
+        all_results.extend(run_check(rule))
 
     for rule in human_rules:
         all_results.append(CheckResult(
