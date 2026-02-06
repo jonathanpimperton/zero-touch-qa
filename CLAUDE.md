@@ -4,7 +4,7 @@ Automated website QA scanner for PetDesk veterinary clinic websites built on Wor
 
 ## What This Does
 
-Scans a live veterinary clinic website against the same QA checklist rules that human QA specialists check manually. Produces a scored pass/fail report with specific failures, warnings, and a checklist of items that still need human judgment. Includes grammar/spelling checks via LanguageTool API, broken image detection, Open Graph social sharing validation, and mixed content security checks.
+Scans a live veterinary clinic website against the same QA checklist rules that human QA specialists check manually. Produces a scored pass/fail report with specific failures, warnings, and a checklist of items that still need human judgment. Includes grammar/spelling checks via LanguageTool API, broken image detection, Open Graph social sharing validation, mixed content security checks, AI-powered image analysis and visual consistency checks, and automated responsive viewport testing.
 
 ## Architecture
 
@@ -17,8 +17,9 @@ User (browser)  or  Wrike (webhook)
      +--------+--------+----------+----------+
      |                 |           |          |
 qa_rules.py     qa_scanner.py    db.py    wp_api.py
-(122 rules)     (57 checks +     (PostgreSQL (5 WP checks,
-                 crawling)        persistence) plugin client)
+(119 rules)     (62 checks +     (PostgreSQL (5 WP checks,
+                 crawling +       persistence) plugin client)
+                 AI vision)
                        |
                  qa_report.py
                  (HTML + JSON output)
@@ -279,6 +280,21 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
 - `ADMIN_KEY` - Secret key for admin endpoints like `/admin/clear-history`. Set via Render dashboard or `.env`.
+- `ANTHROPIC_API_KEY` - Anthropic API key for AI-powered checks (image appropriateness, visual consistency). Enables Claude Vision analysis. Without it, these checks fall back to human review.
+
+## AI-Powered Checks
+
+The scanner uses Claude Vision API (Anthropic) for automated checks that previously required human judgment:
+
+| Check | What It Does |
+|-------|--------------|
+| Image Appropriateness | Analyzes images on sensitive pages (euthanasia, end-of-life) for inappropriate content |
+| Visual Consistency | Takes homepage screenshot and checks for alignment, spacing, and color consistency issues |
+| Responsive Viewports | Uses Playwright to test site at desktop (1920px), tablet (768px), and mobile (375px) |
+| Map Location | Geocodes clinic address and verifies Google Maps iframe coordinates match |
+| Branding Consistency | Checks for default Divi fonts and inconsistent button colors |
+
+These checks reduce human review items from 33 to 25 while improving consistency and speed.
 
 ## Test Sites (Demo Results)
 

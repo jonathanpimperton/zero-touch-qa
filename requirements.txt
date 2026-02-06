@@ -6,3 +6,4 @@ lxml>=5.0
 python-dotenv>=1.0
 playwright>=1.40
 psycopg2-binary>=2.9
+anthropic>=0.40

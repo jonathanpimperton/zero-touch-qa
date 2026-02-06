@@ -823,6 +823,9 @@ def generate_html_report(report) -> str:
             .results-table {{ box-shadow: none; border: 1px solid #e5e7eb; }}
             .results-table tr:hover {{ background: inherit; }}
             .issue-card:hover {{ box-shadow: none; transform: none; }}
+            /* Expand all collapsed details for PDF */
+            .collapse-content {{ display: block !important; }}
+            .collapse-toggle {{ display: none !important; }}
         }}
         @media (max-width: 700px) {{
             .score-section {{ grid-template-columns: 1fr; }}

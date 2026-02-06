@@ -562,23 +562,23 @@
     },
     {
       "id": "HUMAN-002",
-      "category": "human_review",
+      "category": "content",
       "phase": ["full", "final"],
-      "check": "Image appropriateness (especially for sensitive pages: euthanasia, end-of-life)",
-      "automated": false,
-      "weight": 1,
+      "check": "AI check: Image appropriateness on sensitive pages (euthanasia, end-of-life)",
+      "automated": true,
+      "weight": 2,
       "partners": "all",
-      "check_fn": null
+      "check_fn": "check_image_appropriateness"
     },
     {
       "id": "HUMAN-003",
-      "category": "human_review",
+      "category": "craftsmanship",
       "phase": ["full", "final"],
-      "check": "Alignment, balance, spacing, color matching consistency across site",
-      "automated": false,
-      "weight": 5,
+      "check": "AI check: Visual consistency (alignment, spacing, colors)",
+      "automated": true,
+      "weight": 2,
       "partners": "all",
-      "check_fn": null
+      "check_fn": "check_visual_consistency"
     },
     {
       "id": "HUMAN-004",
@@ -592,23 +592,13 @@
     },
     {
       "id": "HUMAN-005",
-      "category": "human_review",
+      "category": "craftsmanship",
       "phase": ["prototype", "full", "final"],
-      "check": "Divi branding colors match survey notes",
-      "automated": false,
-      "weight": 1,
+      "check": "Branding consistency: fonts not default Divi, button colors consistent",
+      "automated": true,
+      "weight": 2,
       "partners": "all",
-      "check_fn": null
-    },
-    {
-      "id": "HUMAN-006",
-      "category": "human_review",
-      "phase": ["prototype", "full", "final"],
-      "check": "Default fonts updated to align with branding",
-      "automated": false,
-      "weight": 1,
-      "partners": "all",
-      "check_fn": null
+      "check_fn": "check_branding_consistency"
     },
     {
       "id": "HUMAN-007",
@@ -637,16 +627,6 @@
       "check": "Service page descriptions are complete and accurate",
       "automated": false,
       "weight": 2,
-      "partners": "all",
-      "check_fn": null
-    },
-    {
-      "id": "HUMAN-010",
-      "category": "human_review",
-      "phase": ["full", "final"],
-      "check": "Button colors match brand color scheme",
-      "automated": false,
-      "weight": 1,
       "partners": "all",
       "check_fn": null
     },
@@ -702,33 +682,23 @@
     },
     {
       "id": "HUMAN-016",
-      "category": "human_review",
-      "phase": ["final"],
-      "check": "Form tested on multiple browsers and devices",
-      "automated": false,
-      "weight": 2,
+      "category": "functionality",
+      "phase": ["full", "final"],
+      "check": "Responsive viewport testing: Desktop, Tablet (768px), Mobile (375px)",
+      "automated": true,
+      "weight": 3,
       "partners": "all",
-      "check_fn": null
-    },
-    {
-      "id": "HUMAN-017",
-      "category": "human_review",
-      "phase": ["final"],
-      "check": "Site tested on tablet devices (iPad, Android tablet)",
-      "automated": false,
-      "weight": 1,
-      "partners": "all",
-      "check_fn": null
+      "check_fn": "check_responsive_viewports"
     },
     {
       "id": "HUMAN-018",
-      "category": "human_review",
+      "category": "functionality",
       "phase": ["full", "final"],
-      "check": "Location/address on map is correct",
-      "automated": false,
+      "check": "Map location matches clinic address (geocoded verification)",
+      "automated": true,
       "weight": 2,
       "partners": "all",
-      "check_fn": null
+      "check_fn": "check_map_location"
     }
   ],
   "western": [

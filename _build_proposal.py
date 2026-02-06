@@ -163,27 +163,39 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>What Gets Automated</h2>
-        <table class="data-table" style="margin-bottom: 12px; font-size: 12px;">
-            <thead>
-                <tr>
-                    <th style="padding: 8px 12px;">Category</th>
-                    <th style="padding: 8px 12px;">Checks</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td style="padding: 6px 12px;">Template Text</td><td style="padding: 6px 12px;">7 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Links & Images</td><td style="padding: 6px 12px;">4 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Footer Compliance</td><td style="padding: 6px 12px;">3 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">SEO & Social Sharing</td><td style="padding: 6px 12px;">8 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Content</td><td style="padding: 6px 12px;">3 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Navigation</td><td style="padding: 6px 12px;">2 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Grammar & Spelling</td><td style="padding: 6px 12px;">1 check</td></tr>
-                <tr><td style="padding: 6px 12px;">Security (Mixed Content)</td><td style="padding: 6px 12px;">1 check</td></tr>
-                <tr><td style="padding: 6px 12px;">Partner-Specific</td><td style="padding: 6px 12px;">9 checks</td></tr>
-            </tbody>
-        </table>
-        <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 16px; border-radius: 4px;">
-            <p style="font-size: 13px; font-weight: 500;">89 automated rules run instantly. 33 items flagged for human review.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th style="padding: 6px 10px;">Category</th>
+                        <th style="padding: 6px 10px;">Rules</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td style="padding: 5px 10px;">Template Text / Search-Replace</td><td style="padding: 5px 10px;">11</td></tr>
+                    <tr><td style="padding: 5px 10px;">Links, Images, Mixed Content</td><td style="padding: 5px 10px;">5</td></tr>
+                    <tr><td style="padding: 5px 10px;">Footer &amp; Navigation</td><td style="padding: 5px 10px;">7</td></tr>
+                    <tr><td style="padding: 5px 10px;">SEO &amp; Social Sharing</td><td style="padding: 5px 10px;">8</td></tr>
+                    <tr><td style="padding: 5px 10px;">WordPress Backend (via plugin)</td><td style="padding: 5px 10px;">5</td></tr>
+                    <tr><td style="padding: 5px 10px;">Grammar &amp; Spelling</td><td style="padding: 5px 10px;">1</td></tr>
+                    <tr><td style="padding: 5px 10px;">Partner-Specific Rules</td><td style="padding: 5px 10px;">52</td></tr>
+                </tbody>
+            </table>
+            <div>
+                <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
+                    <h3 style="color: #5820BA; font-size: 11px; margin-bottom: 6px;">AI-Powered Checks (Claude Vision)</h3>
+                    <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                        <li>Image appropriateness on sensitive pages</li>
+                        <li>Visual consistency (alignment, spacing, colors)</li>
+                        <li>Responsive viewport testing (3 sizes)</li>
+                        <li>Map location verification (geocoding)</li>
+                        <li>Branding consistency (fonts, button colors)</li>
+                    </ul>
+                </div>
+                <div style="background: #DDEE91; border-left: 3px solid #84cc16; padding: 8px 12px; border-radius: 4px;">
+                    <p style="font-size: 10px; line-height: 1.4;"><strong>Result:</strong> 94 automated rules. Only 25 items need human judgment.</p>
+                </div>
+            </div>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">5</div>
@@ -462,55 +474,62 @@ def main():
     # SLIDE 15: Technology & Deployment
     slides.append(f'''
     <div class="slide">
-        <h2>Technology & Deployment</h2>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;">
-            <div class="card" style="background: linear-gradient(135deg, #faf5ff, #f3e8ff); border-left: 4px solid #5820BA; padding: 10px 14px;">
-                <h3 style="color: #5820BA; font-size: 12px;">Website Scanner</h3>
-                <p style="font-size: 11px; line-height: 1.5;">Crawls pages, checks links, images, text, metadata, security.</p>
+        <h2>Technology Stack</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+            <div class="card" style="padding: 10px 12px;">
+                <h3 style="color: #5820BA; font-size: 12px; margin-bottom: 6px;">Core Stack</h3>
+                <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                    <li><strong>Python 3.12</strong> + Flask web framework</li>
+                    <li><strong>BeautifulSoup4</strong> for HTML parsing</li>
+                    <li><strong>Playwright</strong> for headless browser testing</li>
+                    <li><strong>PostgreSQL</strong> for scan history persistence</li>
+                    <li><strong>Docker</strong> containerized deployment</li>
+                </ul>
             </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-left: 4px solid #22c55e; padding: 10px 14px;">
-                <h3 style="color: #22c55e; font-size: 12px;">QA Rules Engine</h3>
-                <p style="font-size: 11px; line-height: 1.5;">89 rules, 10 categories. QA team edits rules via web app.</p>
-            </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfeff, #cffafe); border-left: 4px solid #2DCCE8; padding: 10px 14px;">
-                <h3 style="color: #0891b2; font-size: 12px;">Report Generator</h3>
-                <p style="font-size: 11px; line-height: 1.5;">Scored reports with failures, warnings, human review checklist.</p>
+            <div class="card" style="padding: 10px 12px;">
+                <h3 style="color: #22c55e; font-size: 12px; margin-bottom: 6px;">External APIs</h3>
+                <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                    <li><strong>Claude Vision API</strong> &mdash; AI image &amp; visual analysis</li>
+                    <li><strong>LanguageTool API</strong> &mdash; Grammar/spelling (free)</li>
+                    <li><strong>Nominatim/OSM</strong> &mdash; Address geocoding (free)</li>
+                    <li><strong>PageSpeed Insights</strong> &mdash; Performance scoring</li>
+                    <li><strong>WordPress REST API</strong> &mdash; Backend checks via plugin</li>
+                </ul>
             </div>
         </div>
-        <table class="data-table" style="font-size: 11px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+            <div style="background: #FAF5FF; border: 1px solid #e9d5ff; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #5820BA;">119</div>
+                <div style="font-size: 9px; color: #6b7280;">QA Rules</div>
+            </div>
+            <div style="background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #22c55e;">94</div>
+                <div style="font-size: 9px; color: #6b7280;">Automated</div>
+            </div>
+            <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #d97706;">25</div>
+                <div style="font-size: 9px; color: #6b7280;">Human Review</div>
+            </div>
+            <div style="background: #ecfeff; border: 1px solid #cffafe; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #0891b2;">8</div>
+                <div style="font-size: 9px; color: #6b7280;">Partners</div>
+            </div>
+        </div>
+        <table class="data-table" style="font-size: 10px;">
             <thead>
                 <tr>
-                    <th style="padding: 6px 10px;"></th>
-                    <th style="padding: 6px 10px;">Hackathon Demo</th>
-                    <th style="padding: 6px 10px;">Production (Recommended)</th>
+                    <th style="padding: 5px 8px;">Deployment</th>
+                    <th style="padding: 5px 8px;">Hackathon</th>
+                    <th style="padding: 5px 8px;">Production</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Platform</td>
-                    <td style="padding: 6px 10px;">Render.com</td>
-                    <td style="padding: 6px 10px;">Google Cloud Run</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Database</td>
-                    <td style="padding: 6px 10px;">Render PostgreSQL</td>
-                    <td style="padding: 6px 10px;">Firestore or Cloud SQL</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Cost</td>
-                    <td style="padding: 6px 10px;">$14/mo (Web $7 + DB $7)</td>
-                    <td style="padding: 6px 10px;">~$0&ndash;5/mo (free tier eligible)</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Identity</td>
-                    <td style="padding: 6px 10px;">Separate login</td>
-                    <td style="padding: 6px 10px;">Google Workspace SSO</td>
-                </tr>
+                <tr><td style="padding: 5px 8px;">Platform</td><td style="padding: 5px 8px;">Render.com (Docker)</td><td style="padding: 5px 8px;">Google Cloud Run</td></tr>
+                <tr><td style="padding: 5px 8px;">Database</td><td style="padding: 5px 8px;">Render PostgreSQL</td><td style="padding: 5px 8px;">Cloud SQL</td></tr>
+                <tr><td style="padding: 5px 8px;">Cost</td><td style="padding: 5px 8px;">$14/mo</td><td style="padding: 5px 8px;">~$5/mo</td></tr>
+                <tr><td style="padding: 5px 8px;">Identity</td><td style="padding: 5px 8px;">Open access</td><td style="padding: 5px 8px;">Google Workspace SSO</td></tr>
             </tbody>
         </table>
-        <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 10px 14px; border-radius: 4px;">
-            <p style="font-size: 11px; line-height: 1.5;"><strong style="color: #22c55e;">Security:</strong> Google Cloud integrates with existing Workspace identity, keeps data within PetDesk&rsquo;s GCP boundary, offers granular IAM, audit logging, and compliance certs (SOC 2, HIPAA, ISO 27001). No new vendor agreements needed.</p>
-        </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">15</div>
     </div>

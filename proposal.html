@@ -293,27 +293,39 @@ h3 { font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px; colo
 
     <div class="slide">
         <h2>What Gets Automated</h2>
-        <table class="data-table" style="margin-bottom: 12px; font-size: 12px;">
-            <thead>
-                <tr>
-                    <th style="padding: 8px 12px;">Category</th>
-                    <th style="padding: 8px 12px;">Checks</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td style="padding: 6px 12px;">Template Text</td><td style="padding: 6px 12px;">7 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Links & Images</td><td style="padding: 6px 12px;">4 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Footer Compliance</td><td style="padding: 6px 12px;">3 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">SEO & Social Sharing</td><td style="padding: 6px 12px;">8 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Content</td><td style="padding: 6px 12px;">3 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Navigation</td><td style="padding: 6px 12px;">2 checks</td></tr>
-                <tr><td style="padding: 6px 12px;">Grammar & Spelling</td><td style="padding: 6px 12px;">1 check</td></tr>
-                <tr><td style="padding: 6px 12px;">Security (Mixed Content)</td><td style="padding: 6px 12px;">1 check</td></tr>
-                <tr><td style="padding: 6px 12px;">Partner-Specific</td><td style="padding: 6px 12px;">9 checks</td></tr>
-            </tbody>
-        </table>
-        <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 16px; border-radius: 4px;">
-            <p style="font-size: 13px; font-weight: 500;">89 automated rules run instantly. 33 items flagged for human review.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+            <table class="data-table" style="font-size: 11px;">
+                <thead>
+                    <tr>
+                        <th style="padding: 6px 10px;">Category</th>
+                        <th style="padding: 6px 10px;">Rules</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td style="padding: 5px 10px;">Template Text / Search-Replace</td><td style="padding: 5px 10px;">11</td></tr>
+                    <tr><td style="padding: 5px 10px;">Links, Images, Mixed Content</td><td style="padding: 5px 10px;">5</td></tr>
+                    <tr><td style="padding: 5px 10px;">Footer &amp; Navigation</td><td style="padding: 5px 10px;">7</td></tr>
+                    <tr><td style="padding: 5px 10px;">SEO &amp; Social Sharing</td><td style="padding: 5px 10px;">8</td></tr>
+                    <tr><td style="padding: 5px 10px;">WordPress Backend (via plugin)</td><td style="padding: 5px 10px;">5</td></tr>
+                    <tr><td style="padding: 5px 10px;">Grammar &amp; Spelling</td><td style="padding: 5px 10px;">1</td></tr>
+                    <tr><td style="padding: 5px 10px;">Partner-Specific Rules</td><td style="padding: 5px 10px;">52</td></tr>
+                </tbody>
+            </table>
+            <div>
+                <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
+                    <h3 style="color: #5820BA; font-size: 11px; margin-bottom: 6px;">AI-Powered Checks (Claude Vision)</h3>
+                    <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                        <li>Image appropriateness on sensitive pages</li>
+                        <li>Visual consistency (alignment, spacing, colors)</li>
+                        <li>Responsive viewport testing (3 sizes)</li>
+                        <li>Map location verification (geocoding)</li>
+                        <li>Branding consistency (fonts, button colors)</li>
+                    </ul>
+                </div>
+                <div style="background: #DDEE91; border-left: 3px solid #84cc16; padding: 8px 12px; border-radius: 4px;">
+                    <p style="font-size: 10px; line-height: 1.4;"><strong>Result:</strong> 94 automated rules. Only 25 items need human judgment.</p>
+                </div>
+            </div>
         </div>
         <img src="data:image/png;base64,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" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">5</div>
@@ -572,55 +584,62 @@ h3 { font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px; colo
     
 
     <div class="slide">
-        <h2>Technology & Deployment</h2>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;">
-            <div class="card" style="background: linear-gradient(135deg, #faf5ff, #f3e8ff); border-left: 4px solid #5820BA; padding: 10px 14px;">
-                <h3 style="color: #5820BA; font-size: 12px;">Website Scanner</h3>
-                <p style="font-size: 11px; line-height: 1.5;">Crawls pages, checks links, images, text, metadata, security.</p>
+        <h2>Technology Stack</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+            <div class="card" style="padding: 10px 12px;">
+                <h3 style="color: #5820BA; font-size: 12px; margin-bottom: 6px;">Core Stack</h3>
+                <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                    <li><strong>Python 3.12</strong> + Flask web framework</li>
+                    <li><strong>BeautifulSoup4</strong> for HTML parsing</li>
+                    <li><strong>Playwright</strong> for headless browser testing</li>
+                    <li><strong>PostgreSQL</strong> for scan history persistence</li>
+                    <li><strong>Docker</strong> containerized deployment</li>
+                </ul>
             </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-left: 4px solid #22c55e; padding: 10px 14px;">
-                <h3 style="color: #22c55e; font-size: 12px;">QA Rules Engine</h3>
-                <p style="font-size: 11px; line-height: 1.5;">89 rules, 10 categories. QA team edits rules via web app.</p>
-            </div>
-            <div class="card" style="background: linear-gradient(135deg, #ecfeff, #cffafe); border-left: 4px solid #2DCCE8; padding: 10px 14px;">
-                <h3 style="color: #0891b2; font-size: 12px;">Report Generator</h3>
-                <p style="font-size: 11px; line-height: 1.5;">Scored reports with failures, warnings, human review checklist.</p>
+            <div class="card" style="padding: 10px 12px;">
+                <h3 style="color: #22c55e; font-size: 12px; margin-bottom: 6px;">External APIs</h3>
+                <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
+                    <li><strong>Claude Vision API</strong> &mdash; AI image &amp; visual analysis</li>
+                    <li><strong>LanguageTool API</strong> &mdash; Grammar/spelling (free)</li>
+                    <li><strong>Nominatim/OSM</strong> &mdash; Address geocoding (free)</li>
+                    <li><strong>PageSpeed Insights</strong> &mdash; Performance scoring</li>
+                    <li><strong>WordPress REST API</strong> &mdash; Backend checks via plugin</li>
+                </ul>
             </div>
         </div>
-        <table class="data-table" style="font-size: 11px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px;">
+            <div style="background: #FAF5FF; border: 1px solid #e9d5ff; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #5820BA;">119</div>
+                <div style="font-size: 9px; color: #6b7280;">QA Rules</div>
+            </div>
+            <div style="background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #22c55e;">94</div>
+                <div style="font-size: 9px; color: #6b7280;">Automated</div>
+            </div>
+            <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #d97706;">25</div>
+                <div style="font-size: 9px; color: #6b7280;">Human Review</div>
+            </div>
+            <div style="background: #ecfeff; border: 1px solid #cffafe; border-radius: 4px; padding: 8px; text-align: center;">
+                <div style="font-size: 18px; font-weight: 700; color: #0891b2;">8</div>
+                <div style="font-size: 9px; color: #6b7280;">Partners</div>
+            </div>
+        </div>
+        <table class="data-table" style="font-size: 10px;">
             <thead>
                 <tr>
-                    <th style="padding: 6px 10px;"></th>
-                    <th style="padding: 6px 10px;">Hackathon Demo</th>
-                    <th style="padding: 6px 10px;">Production (Recommended)</th>
+                    <th style="padding: 5px 8px;">Deployment</th>
+                    <th style="padding: 5px 8px;">Hackathon</th>
+                    <th style="padding: 5px 8px;">Production</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Platform</td>
-                    <td style="padding: 6px 10px;">Render.com</td>
-                    <td style="padding: 6px 10px;">Google Cloud Run</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Database</td>
-                    <td style="padding: 6px 10px;">Render PostgreSQL</td>
-                    <td style="padding: 6px 10px;">Firestore or Cloud SQL</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Cost</td>
-                    <td style="padding: 6px 10px;">$14/mo (Web $7 + DB $7)</td>
-                    <td style="padding: 6px 10px;">~$0&ndash;5/mo (free tier eligible)</td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 10px; font-weight: 600;">Identity</td>
-                    <td style="padding: 6px 10px;">Separate login</td>
-                    <td style="padding: 6px 10px;">Google Workspace SSO</td>
-                </tr>
+                <tr><td style="padding: 5px 8px;">Platform</td><td style="padding: 5px 8px;">Render.com (Docker)</td><td style="padding: 5px 8px;">Google Cloud Run</td></tr>
+                <tr><td style="padding: 5px 8px;">Database</td><td style="padding: 5px 8px;">Render PostgreSQL</td><td style="padding: 5px 8px;">Cloud SQL</td></tr>
+                <tr><td style="padding: 5px 8px;">Cost</td><td style="padding: 5px 8px;">$14/mo</td><td style="padding: 5px 8px;">~$5/mo</td></tr>
+                <tr><td style="padding: 5px 8px;">Identity</td><td style="padding: 5px 8px;">Open access</td><td style="padding: 5px 8px;">Google Workspace SSO</td></tr>
             </tbody>
         </table>
-        <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 10px 14px; border-radius: 4px;">
-            <p style="font-size: 11px; line-height: 1.5;"><strong style="color: #22c55e;">Security:</strong> Google Cloud integrates with existing Workspace identity, keeps data within PetDesk&rsquo;s GCP boundary, offers granular IAM, audit logging, and compliance certs (SOC 2, HIPAA, ISO 27001). No new vendor agreements needed.</p>
-        </div>
         <img src="data:image/png;base64,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" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">15</div>
     </div>

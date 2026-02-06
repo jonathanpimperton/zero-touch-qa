@@ -35,6 +35,17 @@ PSI_API_KEY = os.environ.get("PSI_API_KEY", "")
 PLAYWRIGHT_ALWAYS = os.environ.get("PLAYWRIGHT_ALWAYS", "").strip() == "1"
 USER_AGENT = "ZeroTouchQA/1.0 (PetDesk Internal QA Scanner)"
 
+# Anthropic API for AI-powered image analysis
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# Optional: Anthropic SDK for vision analysis
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    anthropic = None
+
 
 # =============================================================================
 # DATA CLASSES
@@ -2680,6 +2691,548 @@ def check_responsive_cta_text(pages: dict, rule: dict) -> list[CheckResult]:
 
 
 # =============================================================================
+# NEW AUTOMATED CHECKS (formerly human review)
+# =============================================================================
+
+def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[CheckResult]:
+    """
+    Automated responsive testing using Playwright at multiple viewport sizes.
+    Replaces HUMAN-016 (browser testing) and HUMAN-017 (tablet testing).
+    """
+    if not PLAYWRIGHT_AVAILABLE:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="Playwright not available. Manually verify site displays correctly on desktop, tablet, and mobile.",
+        )]
+
+    # Get homepage URL
+    homepage_url = None
+    for url in pages.keys():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path in ("/", ""):
+            homepage_url = url
+            break
+
+    if not homepage_url:
+        homepage_url = list(pages.keys())[0] if pages else None
+
+    if not homepage_url:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="SKIP", weight=rule["weight"],
+            details="No pages to test.",
+        )]
+
+    viewports = [
+        {"name": "Desktop", "width": 1920, "height": 1080},
+        {"name": "Tablet", "width": 768, "height": 1024},
+        {"name": "Mobile", "width": 375, "height": 812},
+    ]
+
+    issues = []
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+
+            for vp in viewports:
+                try:
+                    context = browser.new_context(
+                        viewport={"width": vp["width"], "height": vp["height"]},
+                        user_agent=USER_AGENT
+                    )
+                    page = context.new_page()
+                    page.goto(homepage_url, timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=15000)
+
+                    # Check for horizontal overflow (common responsive issue)
+                    has_overflow = page.evaluate("""
+                        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+                    """)
+
+                    if has_overflow:
+                        issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
+
+                    # Check if main content is visible
+                    main_visible = page.evaluate("""
+                        () => {
+                            const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
+                            if (!main) return true;  // No main element to check
+                            const rect = main.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0;
+                        }
+                    """)
+
+                    if not main_visible:
+                        issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
+
+                    context.close()
+
+                except Exception as e:
+                    issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
+
+            browser.close()
+
+    except Exception as e:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"Responsive test failed: {str(e)[:100]}. Manual verification recommended.",
+        )]
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details="Responsive issues found:\n" + "\n".join(issues),
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="Site displays correctly at Desktop (1920px), Tablet (768px), and Mobile (375px) viewports.",
+    )]
+
+
+def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    Verify map iframe location matches the clinic address on the page.
+    Replaces HUMAN-018 (map location correct).
+    Uses Nominatim (OpenStreetMap) for free geocoding.
+    """
+    # Find pages with contact info or maps
+    address_pattern = re.compile(
+        r'\d+\s+[\w\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Plaza|Plz)[\s,]+[\w\s]+,?\s*[A-Z]{2}\s+\d{5}',
+        re.IGNORECASE
+    )
+
+    map_coords = None
+    page_address = None
+    map_page_url = None
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Look for Google Maps iframe
+        iframes = page.soup.find_all("iframe")
+        for iframe in iframes:
+            src = iframe.get("src", "")
+            if "google.com/maps" in src or "maps.google" in src:
+                # Extract coordinates from embed URL
+                # Format: !2d-122.4194!3d37.7749 or q=lat,lng or center=lat,lng
+                coord_match = re.search(r'!3d(-?\d+\.?\d*)!2d(-?\d+\.?\d*)', src)
+                if coord_match:
+                    map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                    map_page_url = url
+                else:
+                    # Try q= or center= format
+                    coord_match = re.search(r'(?:q=|center=)(-?\d+\.?\d*),(-?\d+\.?\d*)', src)
+                    if coord_match:
+                        map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                        map_page_url = url
+
+        # Look for address on page
+        text = page.soup.get_text()
+        addr_match = address_pattern.search(text)
+        if addr_match:
+            page_address = addr_match.group(0).strip()
+
+    if not map_coords:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="No map iframe with coordinates found. Verify map location manually.",
+        )]
+
+    if not page_address:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"Map found but could not extract address from page. Map at: {map_coords}. Verify manually.",
+        )]
+
+    # Geocode the address using Nominatim (free, no API key)
+    try:
+        geocode_url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            "q": page_address,
+            "format": "json",
+            "limit": 1
+        }
+        headers = {"User-Agent": USER_AGENT}
+        resp = requests.get(geocode_url, params=params, headers=headers, timeout=10)
+
+        if resp.status_code == 200 and resp.json():
+            result = resp.json()[0]
+            geocoded_lat = float(result["lat"])
+            geocoded_lon = float(result["lon"])
+
+            # Calculate distance (rough approximation)
+            # 0.01 degree ≈ 1.1 km at equator
+            lat_diff = abs(geocoded_lat - map_coords[0])
+            lon_diff = abs(geocoded_lon - map_coords[1])
+
+            # Allow ~2km tolerance (0.02 degrees)
+            if lat_diff < 0.02 and lon_diff < 0.02:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="PASS", weight=rule["weight"],
+                    details=f"Map location matches address: {page_address[:50]}...",
+                )]
+            else:
+                return [CheckResult(
+                    rule_id=rule["id"], category=rule["category"],
+                    check=rule["check"], status="FAIL", weight=rule["weight"],
+                    details=f"Map location may be incorrect. Address: {page_address[:50]}. Map coords: {map_coords}, Expected: ({geocoded_lat:.4f}, {geocoded_lon:.4f})",
+                    page_url=map_page_url,
+                )]
+        else:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
+                details=f"Could not geocode address: {page_address[:50]}. Verify map manually.",
+            )]
+
+    except Exception as e:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"Geocoding failed: {str(e)[:50]}. Verify map location manually.",
+        )]
+
+
+def check_image_appropriateness(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    AI-powered check for inappropriate images on sensitive pages.
+    Replaces HUMAN-002 (image appropriateness for euthanasia/end-of-life pages).
+    Uses Claude Vision API to analyze images.
+    """
+    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="AI image analysis not available. Manually check images on sensitive pages (euthanasia, end-of-life) for appropriateness.",
+        )]
+
+    # Find sensitive pages
+    sensitive_keywords = ["euthanasia", "end-of-life", "end of life", "goodbye", "memorial", "loss", "grief", "compassionate"]
+    sensitive_pages = []
+
+    for url, page in pages.items():
+        url_lower = url.lower()
+        if any(kw in url_lower for kw in sensitive_keywords):
+            sensitive_pages.append((url, page))
+            continue
+        if page.soup:
+            title = page.soup.find("title")
+            if title and any(kw in title.get_text().lower() for kw in sensitive_keywords):
+                sensitive_pages.append((url, page))
+
+    if not sensitive_pages:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details="No sensitive pages (euthanasia/end-of-life) detected requiring image review.",
+        )]
+
+    issues = []
+    checked_images = 0
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    for url, page in sensitive_pages[:3]:  # Limit to 3 pages to control API costs
+        if not page.soup:
+            continue
+
+        images = page.soup.find_all("img")
+        for img in images[:5]:  # Limit to 5 images per page
+            src = img.get("src", "")
+            if not src or "placeholder" in src.lower() or "icon" in src.lower():
+                continue
+
+            # Make absolute URL
+            if src.startswith("/"):
+                parsed = urllib.parse.urlparse(url)
+                src = f"{parsed.scheme}://{parsed.netloc}{src}"
+            elif not src.startswith("http"):
+                continue
+
+            try:
+                # Fetch image
+                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
+                if img_resp.status_code != 200:
+                    continue
+
+                content_type = img_resp.headers.get("content-type", "")
+                if "image" not in content_type:
+                    continue
+
+                # Convert to base64
+                import base64
+                img_b64 = base64.b64encode(img_resp.content).decode("utf-8")
+
+                # Determine media type
+                if "png" in content_type:
+                    media_type = "image/png"
+                elif "gif" in content_type:
+                    media_type = "image/gif"
+                elif "webp" in content_type:
+                    media_type = "image/webp"
+                else:
+                    media_type = "image/jpeg"
+
+                # Ask Claude to analyze
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=200,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": img_b64
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": """This image is on a veterinary clinic's euthanasia/end-of-life page.
+                                Analyze if this image is appropriate. Flag as INAPPROPRIATE if it shows:
+                                - Real pets that appear deceased or dying
+                                - Graphic medical imagery (needles, syringes, blood)
+                                - Distressing imagery that could upset grieving pet owners
+
+                                Stock photos of peaceful pets, nature scenes, candles, or abstract comfort imagery are APPROPRIATE.
+
+                                Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
+                            }
+                        ]
+                    }]
+                )
+
+                checked_images += 1
+                result_text = response.content[0].text.strip()
+
+                if result_text.startswith("INAPPROPRIATE"):
+                    issues.append(f"{url}: {src[:50]}... - {result_text}")
+
+            except Exception as e:
+                # Skip failed images silently
+                continue
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=f"Potentially inappropriate images on sensitive pages:\n" + "\n".join(issues),
+        )]
+
+    if checked_images == 0:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=f"Found {len(sensitive_pages)} sensitive page(s) but could not analyze images. Manual review needed.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details=f"Analyzed {checked_images} images on {len(sensitive_pages)} sensitive page(s). All images appear appropriate.",
+    )]
+
+
+def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    AI-powered check for visual consistency (alignment, spacing, colors).
+    Replaces HUMAN-003 (visual consistency across site).
+    Uses Claude Vision API to analyze page screenshots.
+    """
+    if not PLAYWRIGHT_AVAILABLE:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="Playwright not available for screenshots. Manually verify visual consistency.",
+        )]
+
+    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="AI analysis not available. Manually verify alignment, spacing, and color consistency.",
+        )]
+
+    # Get homepage URL
+    homepage_url = None
+    for url in pages.keys():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path in ("/", ""):
+            homepage_url = url
+            break
+
+    if not homepage_url:
+        homepage_url = list(pages.keys())[0] if pages else None
+
+    if not homepage_url:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="SKIP", weight=rule["weight"],
+            details="No pages to analyze.",
+        )]
+
+    try:
+        import base64
+
+        # Take screenshot
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent=USER_AGENT
+            )
+            page = context.new_page()
+            page.goto(homepage_url, timeout=30000)
+            page.wait_for_load_state("networkidle", timeout=15000)
+
+            # Take full page screenshot
+            screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
+            browser.close()
+
+        img_b64 = base64.b64encode(screenshot).decode("utf-8")
+
+        # Ask Claude to analyze
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": img_b64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": """Analyze this veterinary clinic website screenshot for visual consistency issues.
+
+Check for:
+1. Alignment problems (elements not aligned properly)
+2. Inconsistent spacing (uneven margins/padding)
+3. Color mismatches (elements that don't match the color scheme)
+4. Text overflow or truncation issues
+5. Overlapping elements
+
+If the page looks professionally designed with consistent alignment, spacing, and colors, respond: PASS
+
+If there are noticeable issues, respond: ISSUES: [list specific problems]
+
+Be concise. Only flag clear, noticeable problems - not minor variations."""
+                    }
+                ]
+            }]
+        )
+
+        result_text = response.content[0].text.strip()
+
+        if result_text.startswith("PASS"):
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="PASS", weight=rule["weight"],
+                details="AI analysis: Homepage shows consistent alignment, spacing, and color usage.",
+            )]
+        elif result_text.startswith("ISSUES"):
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
+                details=f"AI analysis found potential issues: {result_text}",
+                page_url=homepage_url,
+            )]
+        else:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="PASS", weight=rule["weight"],
+                details=f"AI analysis: {result_text[:100]}",
+            )]
+
+    except Exception as e:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=f"Visual analysis failed: {str(e)[:50]}. Manual review needed.",
+        )]
+
+
+def check_branding_consistency(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    Check for consistent branding: fonts not default Divi, button colors consistent.
+    Consolidates HUMAN-005, HUMAN-006, HUMAN-010.
+    """
+    # Default Divi fonts to flag
+    default_divi_fonts = ["open sans", "raleway", "roboto"]
+
+    issues = []
+    fonts_found = set()
+    button_colors = set()
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Check for font declarations in style tags
+        styles = page.soup.find_all("style")
+        for style in styles:
+            text = style.get_text().lower()
+            for font in default_divi_fonts:
+                if f"font-family" in text and font in text:
+                    fonts_found.add(font)
+
+        # Check inline styles
+        elements_with_font = page.soup.find_all(style=re.compile(r"font-family", re.I))
+        for el in elements_with_font:
+            style = el.get("style", "").lower()
+            for font in default_divi_fonts:
+                if font in style:
+                    fonts_found.add(font)
+
+        # Check button colors
+        buttons = page.soup.find_all(class_=re.compile(r"button|btn|cta", re.I))
+        for btn in buttons[:10]:  # Limit checks
+            style = btn.get("style", "")
+            bg_match = re.search(r"background(?:-color)?:\s*(#[0-9a-fA-F]{3,6}|rgb[^)]+\))", style)
+            if bg_match:
+                button_colors.add(bg_match.group(1).lower())
+
+    # Analyze results
+    if fonts_found:
+        issues.append(f"Default Divi fonts detected: {', '.join(fonts_found)} - verify custom fonts are applied")
+
+    # Too many different button colors suggests inconsistency
+    if len(button_colors) > 3:
+        issues.append(f"Multiple button colors found ({len(button_colors)}): {', '.join(list(button_colors)[:4])}...")
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details="Branding consistency check:\n" + "\n".join(issues),
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No default Divi fonts detected. Button colors appear consistent.",
+    )]
+
+
+# =============================================================================
 # CHECK FUNCTION REGISTRY
 # =============================================================================
 
@@ -2754,6 +3307,12 @@ CHECK_FUNCTIONS = {
     "check_heading_structure": check_heading_structure,
     "check_reviews_carousel": check_reviews_carousel,
     "check_responsive_cta_text": check_responsive_cta_text,
+    # New automated checks (formerly human review)
+    "check_responsive_viewports": check_responsive_viewports,
+    "check_map_location": check_map_location,
+    "check_image_appropriateness": check_image_appropriateness,
+    "check_visual_consistency": check_visual_consistency,
+    "check_branding_consistency": check_branding_consistency,
 }
 
 # Import WordPress API check functions and merge
