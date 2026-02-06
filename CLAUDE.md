@@ -324,7 +324,7 @@ The scanner uses Gemini Vision API (primary) or Claude Vision API (fallback) for
 | AI-003 | Branding Consistency | Checks for default Divi fonts and inconsistent button colors |
 | AI-004 | Image Cropping | Detects awkwardly cropped images (cut-off faces, partial logos) |
 | AI-005 | Responsive Viewports | Uses Playwright to test site at desktop (1920px), tablet (768px), and mobile (375px) |
-| AI-006 | Map Location | Geocodes clinic address and verifies Google Maps iframe coordinates match |
+| AI-006 | Map Location | Uses Playwright to find JS-rendered Google Maps, geocodes clinic address, and verifies coordinates match |
 
 These 6 AI-powered checks reduce human review items from 28 to 22 while improving consistency and speed.
 
@@ -392,7 +392,7 @@ The web interface features:
 - **Consistent headers** across all pages with PetDesk branding and subtle glow effects
 - **Animated transitions**: Fade-in on page load, smooth hover states
 - **Form icons**: SVG icons next to URL, Partner, and Phase fields
-- **Step-by-step scanning progress**: Shows current phase with emojis (🔗 Connecting → 🕷️ Crawling → 🌐 Rendering JS (Playwright) → ✓ Checking → 🔐 WordPress Backend → 📝 Grammar (all pages) → 🤖 AI Vision → 📊 Report)
+- **Real-time scanning progress**: Uses Server-Sent Events (SSE) to show actual progress as it happens - connecting, crawling (with page count), WordPress checks, grammar checks, AI analysis, report generation. No fake timers.
 - **Score rings**: Circular colored badges in history (green/yellow/red based on score)
 - **Scan ID badges**: Monospace font with gradient background for easy identification
 
