@@ -1342,14 +1342,15 @@ def _get_issue_headline(details: str, rule_check: str) -> str:
                 return f"{issue_type} ({instance_count} instances)"
             return f"{first_part.split(' on ')[0] if ' on ' in first_part else first_part} ({instance_count} instances)"
 
-    # If the line is very long (>80 chars), truncate it
-    if len(first_line) > 80:
+    # If the line is very long (>150 chars), truncate it
+    # Use a higher limit to preserve actionable fix instructions
+    if len(first_line) > 150:
         # Try to find a natural break point
-        if ": " in first_line[:80]:
+        if ": " in first_line[:150]:
             return first_line.split(": ", 1)[0]
-        if " on " in first_line[:80]:
+        if " on " in first_line[:150]:
             return first_line.split(" on ", 1)[0]
-        return first_line[:77] + "..."
+        return first_line[:147] + "..."
 
     return first_line
 

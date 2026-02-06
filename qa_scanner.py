@@ -869,14 +869,14 @@ def check_outcome_promises(pages: dict, rule: dict) -> list[CheckResult]:
     Veterinary sites should avoid guarantees about treatment results.
     """
     # Patterns that indicate outcome promises - must be specific to avoid false positives
+    # Note: "guaranteed products" is OK (product warranty), we only flag treatment outcome guarantees
     promise_patterns = [
-        (r"\bguarantee[sd]?\s+\w+", "guarantee"),  # "guaranteed results", "guarantees success"
+        (r"\bguarantee[sd]?\s+(cure|recovery|healing|results?|outcomes?|success)", "guarantee"),
         (r"\bwe\s+promise\b", "promise"),  # "we promise" (but not "promise" in other contexts)
         (r"\bwill\s+cure\b", "will cure"),
         (r"\b100\s*%\s*(effective|success|cure)", "100% claim"),
         (r"\bcertain\s+to\s+(cure|heal|fix)", "certain to cure"),
         (r"\balways\s+(works?|succeeds?|cures?)", "always works"),
-        (r"\bguaranteed\s+(results?|outcomes?|recovery)", "guaranteed results"),
     ]
 
     issues = []
