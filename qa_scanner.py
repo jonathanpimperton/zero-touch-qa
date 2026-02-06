@@ -868,15 +868,15 @@ def check_outcome_promises(pages: dict, rule: dict) -> list[CheckResult]:
     Check for marketing language that promises specific outcomes.
     Veterinary sites should avoid guarantees about treatment results.
     """
+    # Patterns that indicate outcome promises - must be specific to avoid false positives
     promise_patterns = [
-        r"\bguarantee[sd]?\b",
-        r"\bpromise[sd]?\b",
-        r"\bwill cure\b",
-        r"\b100%\s+(effective|success|cure)",
-        r"\bprolong(s|ing)?\s+(the\s+)?life\b",
-        r"\bensure[sd]?\s+(your\s+pet|recovery)",
-        r"\bcertain\s+to\b",
-        r"\balways\s+(work|succeed|cure)",
+        (r"\bguarantee[sd]?\s+\w+", "guarantee"),  # "guaranteed results", "guarantees success"
+        (r"\bwe\s+promise\b", "promise"),  # "we promise" (but not "promise" in other contexts)
+        (r"\bwill\s+cure\b", "will cure"),
+        (r"\b100\s*%\s*(effective|success|cure)", "100% claim"),
+        (r"\bcertain\s+to\s+(cure|heal|fix)", "certain to cure"),
+        (r"\balways\s+(works?|succeeds?|cures?)", "always works"),
+        (r"\bguaranteed\s+(results?|outcomes?|recovery)", "guaranteed results"),
     ]
 
     issues = []
@@ -891,18 +891,22 @@ def check_outcome_promises(pages: dict, rule: dict) -> list[CheckResult]:
             continue
 
         text = body.get_text(" ", strip=True).lower()
+        short_url = url.split("//")[-1] if "//" in url else url
 
-        for pattern in promise_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            if matches:
-                issues.append(f"{url}: Found '{matches[0]}'")
+        for pattern, label in promise_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                matched_text = match.group(0)[:30]
+                issues.append(f"{short_url}: \"{matched_text}\"")
                 break  # One issue per page is enough
 
     if issues:
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
-            check=rule["check"], status="WARN", weight=rule["weight"],
-            details=f"Found {len(issues)} page(s) with outcome promise language:\n" + "\n".join(issues[:5]) + "\n\nAvoid guaranteeing specific treatment outcomes.",
+            check=f"Outcome promise language found on {len(issues)} page(s)",
+            status="WARN", weight=rule["weight"],
+            details="Pages with potential outcome guarantees:\n" + "\n".join(f"• {i}" for i in issues[:5]) +
+                   "\n\nVeterinary sites should avoid guaranteeing specific treatment outcomes.",
         )]
 
     return [CheckResult(
@@ -3703,17 +3707,26 @@ def check_branding_consistency(pages: dict, rule: dict) -> list[CheckResult]:
 
     # Analyze results
     if fonts_found:
-        issues.append(f"Default Divi fonts detected: {', '.join(fonts_found)} - verify custom fonts are applied")
+        font_list = ', '.join(fonts_found)
+        issues.append(f"Default Divi fonts detected ({font_list}). These should be replaced with the clinic's brand fonts in Divi Theme Options > General > Typography.")
 
     # Too many different button colors suggests inconsistency
     if len(button_colors) > 3:
-        issues.append(f"Multiple button colors found ({len(button_colors)}): {', '.join(list(button_colors)[:4])}...")
+        issues.append(f"Found {len(button_colors)} different button colors ({', '.join(list(button_colors)[:4])}...). Buttons should use consistent brand colors.")
 
     if issues:
+        # Create a clear headline for each issue type
+        if fonts_found and len(button_colors) <= 3:
+            headline = f"Default Divi fonts found: {', '.join(fonts_found)}"
+        elif len(button_colors) > 3 and not fonts_found:
+            headline = f"Inconsistent button colors ({len(button_colors)} different colors)"
+        else:
+            headline = "Branding inconsistencies detected"
+
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
-            check=rule["check"], status="WARN", weight=rule["weight"],
-            details="Branding consistency check:\n" + "\n".join(issues),
+            check=headline, status="WARN", weight=rule["weight"],
+            details="\n".join(issues),
         )]
 
     return [CheckResult(
