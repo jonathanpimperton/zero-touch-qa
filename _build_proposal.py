@@ -146,8 +146,8 @@ def main():
                 <div class="metric-label">Time Savings</div>
             </div>
             <div class="metric-box">
-                <div class="metric-value">41</div>
-                <div class="metric-label">Automated Checks</div>
+                <div class="metric-value">89</div>
+                <div class="metric-label">Automated Rules</div>
             </div>
             <div class="metric-box">
                 <div class="metric-value">80%</div>
@@ -183,7 +183,7 @@ def main():
             </tbody>
         </table>
         <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 16px; border-radius: 4px;">
-            <p style="font-size: 13px; font-weight: 500;">41 checks run automatically. 4+ items flagged for human review.</p>
+            <p style="font-size: 13px; font-weight: 500;">89 automated rules run instantly. 33 items flagged for human review.</p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">5</div>
@@ -373,37 +373,38 @@ def main():
     slides.append(f'''
     <div class="slide">
         <h2>WordPress Backend Checks</h2>
-        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 16px;">The scanner checks WordPress admin settings via the <strong>PetDesk QA Connector</strong> — a lightweight plugin that exposes backend data through a secure API.</p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
-            <div class="card">
-                <h3 style="color: #5820BA; margin-bottom: 8px;">What It Checks</h3>
-                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px;">
+        <p style="font-size: 13px; line-height: 1.5; margin-bottom: 12px;">The scanner checks WordPress admin settings via the <strong>PetDesk QA Connector</strong> — a custom plugin that exposes backend data through a secure API.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+            <div class="card" style="padding: 12px;">
+                <h3 style="color: #5820BA; margin-bottom: 6px; font-size: 13px;">What It Checks</h3>
+                <ul style="font-size: 11px; line-height: 1.6; padding-left: 16px; margin: 0;">
                     <li>Plugin &amp; theme updates pending</li>
-                    <li>Timezone matches clinic location</li>
-                    <li>Old/template media files in library</li>
-                    <li>Form notification recipients (Gravity Forms)</li>
+                    <li>Timezone matches clinic address</li>
+                    <li>Old/template media in library</li>
+                    <li>Form notifications (Gravity Forms, WPForms)</li>
                 </ul>
             </div>
-            <div class="card">
-                <h3 style="color: #22c55e; margin-bottom: 8px;">Security</h3>
-                <ul style="font-size: 12px; line-height: 1.8; padding-left: 18px;">
-                    <li>Single API key — no per-site credentials</li>
-                    <li>Read-only access — cannot modify site</li>
+            <div class="card" style="padding: 12px;">
+                <h3 style="color: #22c55e; margin-bottom: 6px; font-size: 13px;">Security</h3>
+                <ul style="font-size: 11px; line-height: 1.6; padding-left: 16px; margin: 0;">
+                    <li>Single shared API key — no per-site credentials</li>
+                    <li>Read-only — cannot modify site data</li>
                     <li>API key verified via secure header</li>
-                    <li>Endpoint invisible to unauthenticated users</li>
+                    <li>Endpoint hidden from unauthenticated users</li>
                 </ul>
             </div>
         </div>
-        <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 12px 16px; border-radius: 4px; margin-bottom: 12px;">
-            <h3 style="color: #22c55e; font-size: 13px; margin-bottom: 4px;">Installation</h3>
-            <p style="font-size: 12px; line-height: 1.5;">Upload <code>petdesk-qa-plugin.zip</code> via WordPress Admin &rarr; Plugins &rarr; Add New &rarr; Upload. Activate. Done.</p>
+        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 4px; margin-bottom: 10px;">
+            <h3 style="color: #d97706; font-size: 12px; margin-bottom: 2px;">Action Required: Website Build Team</h3>
+            <p style="font-size: 11px; line-height: 1.4;">Add to build checklist: <strong>"Install PetDesk QA Connector plugin"</strong> on every new WordPress site. Upload via WP Admin &rarr; Plugins &rarr; Add New &rarr; Upload. Without it, backend checks fall back to manual review.</p>
         </div>
-        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
-            <h3 style="color: #d97706; font-size: 12px; margin-bottom: 4px;">Action Required: Website Build Team</h3>
-            <p style="font-size: 11px; line-height: 1.5;">Add to build checklist: <strong>"Install PetDesk QA Connector plugin"</strong> on every new WordPress site. Without the plugin, backend checks fall back to manual review.</p>
-        </div>
-        <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 14px; border-radius: 4px;">
-            <p style="font-size: 11px; font-weight: 500;">Plugin auto-updates via GitHub releases. One release push updates all sites.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div style="background: #ecfdf5; border-left: 3px solid #22c55e; padding: 8px 12px; border-radius: 4px;">
+                <p style="font-size: 10px; line-height: 1.4; margin: 0;"><strong style="color: #22c55e;">Auto-Updates:</strong> Plugin checks GitHub for new releases and updates automatically.</p>
+            </div>
+            <div style="background: #FAF5FF; border-left: 3px solid #5820BA; padding: 8px 12px; border-radius: 4px;">
+                <p style="font-size: 10px; line-height: 1.4; margin: 0;"><strong style="color: #5820BA;">Fallback:</strong> Without plugin, WordPress checks appear in human review checklist.</p>
+            </div>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">12</div>

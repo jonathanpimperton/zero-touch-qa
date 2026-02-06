@@ -1404,25 +1404,6 @@ def history_page():
                                   logo_uri=LOGO_DATA_URI, logo_white_uri=LOGO_WHITE_URI, bg_purple_uri=BG_PURPLE_URI)
 
 
-@app.route("/admin/clear-history", methods=["POST"])
-def admin_clear_history():
-    """Clear all scan history from database. Admin use only."""
-    global scan_history
-    if is_db_available():
-        try:
-            from db import get_connection
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM scans")
-                    cur.execute("DELETE FROM scan_id_map")
-                    cur.execute("ALTER SEQUENCE scan_id_seq RESTART WITH 1")
-            scan_history = []
-            return jsonify({"success": True, "message": "History cleared"})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-    return jsonify({"success": False, "error": "Database not available"}), 400
-
-
 # ---------------------------------------------------------------------------
 # Routes - API (called by web UI and Wrike webhook)
 # ---------------------------------------------------------------------------
