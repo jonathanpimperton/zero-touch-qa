@@ -2041,7 +2041,7 @@ def _languagetool_request_with_retry(text: str, max_retries: int = 3) -> dict | 
 def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
     """Check visible page text for grammar and spelling errors using LanguageTool API.
 
-    Checks ALL pages with exponential backoff retry for rate limiting.
+    Checks up to 8 pages with exponential backoff retry for rate limiting.
     Returns separate results for spelling (FAIL) and grammar (WARN).
     """
     spelling_issues = []
@@ -2049,8 +2049,11 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
     pages_checked = 0
     pages_failed = 0
 
-    # Check ALL pages (no limit)
-    for url, page in pages.items():
+    # Limit to 8 pages to keep scan time reasonable (~4 min max for grammar)
+    max_grammar_pages = 8
+    pages_to_check = list(pages.items())[:max_grammar_pages]
+
+    for url, page in pages_to_check:
         if not page.soup:
             continue
 

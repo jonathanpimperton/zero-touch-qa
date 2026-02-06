@@ -1525,13 +1525,14 @@ def api_scan_stream():
             # Yield progress events as they come
             while True:
                 try:
-                    item = progress_queue.get(timeout=0.5)
+                    # Short timeout to send frequent heartbeats (Render needs activity)
+                    item = progress_queue.get(timeout=0.2)
                     if item is None:
                         break
                     yield f"data: {json.dumps(item)}\n\n"
                 except queue.Empty:
-                    # Send heartbeat to keep connection alive
-                    yield f": heartbeat\n\n"
+                    # Send heartbeat comment to keep connection alive
+                    yield ": keepalive\n\n"
 
             thread.join()
 
