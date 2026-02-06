@@ -1946,6 +1946,10 @@ _DOMAIN_TERMS = {
     "bloodwork", "deworming", "dewormer", "trupanion", "petdesk",
     "webapp", "signup", "login", "dropdown", "popup", "tooltip",
     "webpage", "website", "sitemap", "homepage", "blog",
+    # Dental/medical terms
+    "gumline", "gumlines",
+    # Wildlife/rehabilitation
+    "rehabilitator", "rehabilitators",
 }
 
 
