@@ -900,7 +900,7 @@
       "check_fn": "check_map_location"
     },
     {
-      "id": "CONT-010",
+      "id": "CONT-011",
       "category": "content",
       "phase": [
         "full",
@@ -913,7 +913,7 @@
       "check_fn": "check_long_text_blocks"
     },
     {
-      "id": "CONT-011",
+      "id": "CONT-012",
       "category": "content",
       "phase": [
         "full",
