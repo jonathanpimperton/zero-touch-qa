@@ -1393,8 +1393,25 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
             has_name = any("name" in i.get("name", "").lower() for i in inputs)
 
+            # Skip forms with CAPTCHA (can't automate)
+            has_captcha = any(x in form_html for x in [
+                "recaptcha", "captcha", "hcaptcha", "g-recaptcha", "turnstile"
+            ])
+
+            # Skip complex forms with many required fields (new client forms, etc.)
+            required_fields = [i for i in inputs if i.get("required") is not None
+                              or "required" in i.get("class", [])]
+            is_complex = len(required_fields) > 10
+
             if is_contact_form and (has_email or has_name):
-                forms_to_test.append({"url": url, "form": form, "inputs": inputs})
+                forms_to_test.append({
+                    "url": url,
+                    "form": form,
+                    "inputs": inputs,
+                    "has_captcha": has_captcha,
+                    "is_complex": is_complex,
+                    "required_count": len(required_fields),
+                })
 
     if not forms_to_test:
         return [CheckResult(
@@ -1415,10 +1432,24 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
 
+        forms_skipped_captcha = []
+        forms_skipped_complex = []
+
         for form_info in forms_to_test[:3]:  # Test up to 3 forms
             url = form_info["url"]
             form = form_info["form"]
             inputs = form_info["inputs"]
+            short_url = url.split("//")[-1] if "//" in url else url
+
+            # Skip CAPTCHA-protected forms
+            if form_info.get("has_captcha"):
+                forms_skipped_captcha.append(short_url)
+                continue
+
+            # Skip complex forms (new client forms with many fields)
+            if form_info.get("is_complex"):
+                forms_skipped_complex.append(f"{short_url} ({form_info.get('required_count', '?')} required fields)")
+                continue
 
             try:
                 context = browser.new_context(user_agent=USER_AGENT)
@@ -1492,11 +1523,13 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     context.close()
                     continue
 
-                # Submit and wait for navigation
+                # Submit and wait for navigation or AJAX response
                 original_url = pw_page.url
                 try:
                     pw_page.click(submit_btn)
                     pw_page.wait_for_load_state("networkidle", timeout=10000)
+                    # Extra wait for AJAX responses to render
+                    pw_page.wait_for_timeout(2000)
                 except Exception:
                     pass  # Some forms use AJAX, won't navigate
 
@@ -1549,10 +1582,28 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 
     # Report results
     total_tested = forms_passed + len(forms_failed)
+    total_skipped = len(forms_skipped_captcha) + len(forms_skipped_complex)
 
-    if forms_failed:
+    # Build skip notes
+    skip_notes = []
+    if forms_skipped_captcha:
+        skip_notes.append(f"Skipped {len(forms_skipped_captcha)} form(s) with CAPTCHA (test manually)")
+    if forms_skipped_complex:
+        skip_notes.append(f"Skipped {len(forms_skipped_complex)} complex form(s) with many fields (test manually)")
+    skip_detail = "\n".join(skip_notes) if skip_notes else ""
+
+    if total_tested == 0 and total_skipped > 0:
+        # All forms were skipped
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=f"All forms require manual testing:\n{skip_detail}",
+        ))
+    elif forms_failed:
         detail = f"{len(forms_failed)} of {total_tested} form(s) failed submission test:\n"
         detail += "\n".join(f"• {f}" for f in forms_failed)
+        if skip_detail:
+            detail += f"\n\n{skip_detail}"
         results.append(CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="FAIL", weight=rule["weight"],
@@ -1560,10 +1611,13 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             points_lost=rule["weight"],
         ))
     else:
+        detail = f"All {total_tested} form(s) successfully redirect to thank-you/success pages"
+        if skip_detail:
+            detail += f"\n\n{skip_detail}"
         results.append(CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="PASS", weight=rule["weight"],
-            details=f"All {total_tested} form(s) successfully redirect to thank-you/success pages",
+            details=detail,
         ))
 
     return results
