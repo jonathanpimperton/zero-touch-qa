@@ -1438,7 +1438,6 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
-                "--single-process",
                 "--disable-setuid-sandbox",
             ],
         )
@@ -3231,7 +3230,6 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
-                    "--single-process",
                     "--disable-setuid-sandbox",
                 ],
             )
@@ -3595,7 +3593,6 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
-                    "--single-process",
                     "--disable-setuid-sandbox",
                 ],
             )
