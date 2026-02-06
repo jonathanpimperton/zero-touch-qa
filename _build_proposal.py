@@ -551,7 +551,7 @@ def main():
                 </div>
                 <div class="card" style="font-size: 12px;">
                     <h3 style="font-size: 13px;">Page Layout & Spacing</h3>
-                    <p style="line-height: 1.5;">Element alignment, margins, and section spacing still need a human eye. (Image cropping is now AI-powered via Gemini Vision.)</p>
+                    <p style="line-height: 1.5;">Element alignment, margins, and section spacing require human judgment. Image cropping is handled by AI.</p>
                 </div>
             </div>
             <div>
