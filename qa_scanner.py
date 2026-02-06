@@ -35,16 +35,33 @@ PSI_API_KEY = os.environ.get("PSI_API_KEY", "")
 PLAYWRIGHT_ALWAYS = os.environ.get("PLAYWRIGHT_ALWAYS", "").strip() == "1"
 USER_AGENT = "ZeroTouchQA/1.0 (PetDesk Internal QA Scanner)"
 
-# Anthropic API for AI-powered image analysis
+# Gemini API for AI-powered image analysis (primary)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# Optional: Google Generative AI SDK for vision analysis
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    genai = None
+
+# Anthropic API as fallback
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-# Optional: Anthropic SDK for vision analysis
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
     anthropic = None
+
+# Determine which AI provider to use
+AI_PROVIDER = None
+if GEMINI_AVAILABLE and GEMINI_API_KEY:
+    AI_PROVIDER = "gemini"
+elif ANTHROPIC_AVAILABLE and ANTHROPIC_API_KEY:
+    AI_PROVIDER = "anthropic"
 
 
 # =============================================================================
@@ -2903,13 +2920,56 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
 
+def _analyze_image_with_ai(image_bytes: bytes, prompt: str) -> str:
+    """Helper to analyze an image using Gemini (primary) or Anthropic (fallback)."""
+    import base64
+
+    if AI_PROVIDER == "gemini":
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        # Gemini accepts PIL Image or bytes directly
+        import io
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(image_bytes))
+            response = model.generate_content([prompt, img])
+            return response.text.strip()
+        except ImportError:
+            # Without PIL, use base64
+            img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+            response = model.generate_content([
+                prompt,
+                {"mime_type": "image/jpeg", "data": img_b64}
+            ])
+            return response.text.strip()
+
+    elif AI_PROVIDER == "anthropic":
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                    {"type": "text", "text": prompt}
+                ]
+            }]
+        )
+        return response.content[0].text.strip()
+
+    return None
+
+
 def check_image_appropriateness(pages: dict, rule: dict) -> list[CheckResult]:
     """
     AI-powered check for inappropriate images on sensitive pages.
     Replaces HUMAN-002 (image appropriateness for euthanasia/end-of-life pages).
-    Uses Claude Vision API to analyze images.
+    Uses Gemini Vision API (primary) or Claude Vision API (fallback).
     """
-    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+    if not AI_PROVIDER:
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
@@ -2940,7 +3000,15 @@ def check_image_appropriateness(pages: dict, rule: dict) -> list[CheckResult]:
     issues = []
     checked_images = 0
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    prompt = """This image is on a veterinary clinic's euthanasia/end-of-life page.
+Analyze if this image is appropriate. Flag as INAPPROPRIATE if it shows:
+- Real pets that appear deceased or dying
+- Graphic medical imagery (needles, syringes, blood)
+- Distressing imagery that could upset grieving pet owners
+
+Stock photos of peaceful pets, nature scenes, candles, or abstract comfort imagery are APPROPRIATE.
+
+Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
 
     for url, page in sensitive_pages[:3]:  # Limit to 3 pages to control API costs
         if not page.soup:
@@ -2969,53 +3037,12 @@ def check_image_appropriateness(pages: dict, rule: dict) -> list[CheckResult]:
                 if "image" not in content_type:
                     continue
 
-                # Convert to base64
-                import base64
-                img_b64 = base64.b64encode(img_resp.content).decode("utf-8")
-
-                # Determine media type
-                if "png" in content_type:
-                    media_type = "image/png"
-                elif "gif" in content_type:
-                    media_type = "image/gif"
-                elif "webp" in content_type:
-                    media_type = "image/webp"
-                else:
-                    media_type = "image/jpeg"
-
-                # Ask Claude to analyze
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=200,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": media_type,
-                                    "data": img_b64
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": """This image is on a veterinary clinic's euthanasia/end-of-life page.
-                                Analyze if this image is appropriate. Flag as INAPPROPRIATE if it shows:
-                                - Real pets that appear deceased or dying
-                                - Graphic medical imagery (needles, syringes, blood)
-                                - Distressing imagery that could upset grieving pet owners
-
-                                Stock photos of peaceful pets, nature scenes, candles, or abstract comfort imagery are APPROPRIATE.
-
-                                Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
-                            }
-                        ]
-                    }]
-                )
+                # Use AI helper to analyze image
+                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                if result_text is None:
+                    continue
 
                 checked_images += 1
-                result_text = response.content[0].text.strip()
 
                 if result_text.startswith("INAPPROPRIATE"):
                     issues.append(f"{url}: {src[:50]}... - {result_text}")
@@ -3058,7 +3085,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
             details="Playwright not available for screenshots. Manually verify visual consistency.",
         )]
 
-    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+    if not AI_PROVIDER:
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
@@ -3084,8 +3111,6 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
     try:
-        import base64
-
         # Take screenshot
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -3101,27 +3126,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
             screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
             browser.close()
 
-        img_b64 = base64.b64encode(screenshot).decode("utf-8")
-
-        # Ask Claude to analyze
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": img_b64
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": """Analyze this veterinary clinic website screenshot for visual consistency issues.
+        prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
 
 Check for:
 1. Alignment problems (elements not aligned properly)
@@ -3135,12 +3140,15 @@ If the page looks professionally designed with consistent alignment, spacing, an
 If there are noticeable issues, respond: ISSUES: [list specific problems]
 
 Be concise. Only flag clear, noticeable problems - not minor variations."""
-                    }
-                ]
-            }]
-        )
 
-        result_text = response.content[0].text.strip()
+        result_text = _analyze_image_with_ai(screenshot, prompt)
+
+        if not result_text:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details="AI analysis returned no result. Manual review needed.",
+            )]
 
         if result_text.startswith("PASS"):
             return [CheckResult(

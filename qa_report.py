@@ -974,7 +974,10 @@ def generate_html_report(report) -> str:
 <script>
 var baseScore = {int(report.score)};
 var circumference = 2 * Math.PI * 54;
+var totalHumanItems = {human_review};
 var humanStatuses = {{}};
+// Initialize all human review items as null (not yet reviewed)
+for (var i = 0; i < totalHumanItems; i++) {{ humanStatuses[i] = null; }}
 
 function setReview(idx, status) {{
     var card = document.getElementById('review-' + idx);

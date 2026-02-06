@@ -280,11 +280,12 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
 - `ADMIN_KEY` - Secret key for admin endpoints like `/admin/clear-history`. Set via Render dashboard or `.env`.
-- `ANTHROPIC_API_KEY` - Anthropic API key for AI-powered checks (image appropriateness, visual consistency). Enables Claude Vision analysis. Without it, these checks fall back to human review.
+- `GEMINI_API_KEY` - Google Gemini API key for AI-powered vision checks (primary). Enables image appropriateness and visual consistency analysis. Get a free key from Google AI Studio (ai.google.dev). This is the recommended AI provider.
+- `ANTHROPIC_API_KEY` - Anthropic API key for AI-powered checks (fallback). Used if Gemini is not configured. Requires Claude credits.
 
 ## AI-Powered Checks
 
-The scanner uses Claude Vision API (Anthropic) for automated checks that previously required human judgment:
+The scanner uses Gemini Vision API (primary) or Claude Vision API (fallback) for automated checks that previously required human judgment:
 
 | Check | What It Does |
 |-------|--------------|
