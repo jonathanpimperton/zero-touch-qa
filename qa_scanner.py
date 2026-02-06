@@ -2674,14 +2674,11 @@ def check_photo_gallery_instructions(pages: dict, rule: dict) -> list[CheckResul
                 points_lost=rule["weight"],
             )]
 
-    # No gallery page found - this might be intentional (not all sites have galleries)
+    # No gallery page found - nothing to check, this is fine
     return [CheckResult(
         rule_id=rule["id"], category=rule["category"],
-        check="No photo gallery page detected",
-        status="HUMAN_REVIEW", weight=rule["weight"],
-        details="No page with 'gallery' or 'photo' in the URL was found. "
-               "If this site should have a photo gallery, verify it exists and includes instructions for clients to submit photos. "
-               "If no gallery is planned, mark as N/A.",
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No photo gallery page on this site (not required).",
     )]
 
 
