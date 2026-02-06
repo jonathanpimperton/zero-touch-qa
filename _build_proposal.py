@@ -395,11 +395,15 @@ def main():
             </div>
         </div>
         <div style="background: #ecfdf5; border-left: 4px solid #22c55e; padding: 12px 16px; border-radius: 4px; margin-bottom: 12px;">
-            <h3 style="color: #22c55e; font-size: 13px; margin-bottom: 4px;">Installation (One-Time)</h3>
-            <p style="font-size: 12px; line-height: 1.5;">Upload <code>petdesk-qa-plugin.zip</code> via WordPress Admin &rarr; Plugins &rarr; Add New &rarr; Upload. Activate. Done. All future sites with the plugin are automatically scannable.</p>
+            <h3 style="color: #22c55e; font-size: 13px; margin-bottom: 4px;">Installation</h3>
+            <p style="font-size: 12px; line-height: 1.5;">Upload <code>petdesk-qa-plugin.zip</code> via WordPress Admin &rarr; Plugins &rarr; Add New &rarr; Upload. Activate. Done.</p>
+        </div>
+        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px;">
+            <h3 style="color: #d97706; font-size: 12px; margin-bottom: 4px;">Action Required: Website Build Team</h3>
+            <p style="font-size: 11px; line-height: 1.5;">Add to build checklist: <strong>"Install PetDesk QA Connector plugin"</strong> on every new WordPress site. Without the plugin, backend checks fall back to manual review.</p>
         </div>
         <div style="background: #FAF5FF; border-left: 4px solid #5820BA; padding: 10px 14px; border-radius: 4px;">
-            <p style="font-size: 11px; font-weight: 500;">Tested and working on both hackathon test sites. Plugin returns WordPress 6.9, 30+ plugins, theme status, timezone, and media library info.</p>
+            <p style="font-size: 11px; font-weight: 500;">Plugin auto-updates via GitHub releases. One release push updates all sites.</p>
         </div>
         <img src="{logo_uri}" alt="PetDesk Logo" class="slide-logo" />
         <div class="slide-num">12</div>

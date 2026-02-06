@@ -1520,6 +1520,52 @@ def api_scan():
 
 
 # ---------------------------------------------------------------------------
+# Routes - Admin
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/clear-history", methods=["POST"])
+def admin_clear_history():
+    """
+    Clear all scan history from the database.
+
+    Requires admin key via X-Admin-Key header or admin_key in POST body.
+    Set ADMIN_KEY environment variable to enable this endpoint.
+    """
+    admin_key = os.environ.get("ADMIN_KEY", "")
+    if not admin_key:
+        return jsonify({"error": "Admin endpoint not configured"}), 403
+
+    # Check for admin key in header or body
+    provided_key = request.headers.get("X-Admin-Key") or ""
+    if not provided_key:
+        body = request.get_json(silent=True) or {}
+        provided_key = body.get("admin_key", "")
+
+    if provided_key != admin_key:
+        return jsonify({"error": "Invalid admin key"}), 403
+
+    # Clear the database
+    try:
+        from db import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM scans")
+                scans_deleted = cur.rowcount
+                cur.execute("DELETE FROM scan_id_map")
+                mappings_deleted = cur.rowcount
+                cur.execute("ALTER SEQUENCE scan_id_seq RESTART WITH 1")
+            conn.commit()
+        return jsonify({
+            "status": "success",
+            "scans_deleted": scans_deleted,
+            "mappings_deleted": mappings_deleted,
+            "message": "Scan history cleared and sequence reset"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # Routes - Wrike Webhook
 # ---------------------------------------------------------------------------
 
