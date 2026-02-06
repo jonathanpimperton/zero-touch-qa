@@ -916,6 +916,24 @@ def generate_html_report(report) -> str:
         </div>
     </div>
 
+    <!-- Human Review Progress Banner -->
+    {f'''<div id="human-review-banner" class="human-review-banner" style="background: linear-gradient(135deg, #FAF5FF, #f3e8ff); border: 2px solid #5820BA; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 16px;">
+        <div style="flex-shrink: 0;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#5820BA" stroke-width="2">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+            </svg>
+        </div>
+        <div style="flex-grow: 1;">
+            <div style="font-weight: 600; color: #5820BA; margin-bottom: 4px;">Human Review Required</div>
+            <div style="font-size: 13px; color: #6b7280;">Complete all {human_review} checklist items below before final sign-off.</div>
+            <div style="margin-top: 8px; background: #e9d5ff; border-radius: 4px; height: 8px; overflow: hidden;">
+                <div id="review-progress-bar" style="background: #5820BA; height: 100%; width: 0%; transition: width 0.3s;"></div>
+            </div>
+            <div id="review-progress-text" style="font-size: 12px; color: #5820BA; margin-top: 4px; font-weight: 500;">0 of {human_review} completed</div>
+        </div>
+    </div>''' if human_review > 0 else ''}
+
     <!-- Failures -->
     <div class="section">
         <div class="section-heading heading-red"><span class="dot dot-red"></span> Failures &mdash; Action Required{f' <span style="font-size:12px;font-weight:500;margin-left:auto;opacity:0.7;">({failed} item{"s" if failed != 1 else ""})</span>' if failed else ''}</div>
@@ -1000,6 +1018,21 @@ function recalcScore() {{
         if (humanStatuses[idx] === 'fail') hasHumanFails = true;
     }}
     var allHumanComplete = (completedItems === totalHumanItems);
+
+    // Update progress bar in banner
+    var progressBar = document.getElementById('review-progress-bar');
+    var progressText = document.getElementById('review-progress-text');
+    var banner = document.getElementById('human-review-banner');
+    if (progressBar && progressText) {{
+        var pct = totalHumanItems > 0 ? (completedItems / totalHumanItems * 100) : 0;
+        progressBar.style.width = pct + '%';
+        progressText.textContent = completedItems + ' of ' + totalHumanItems + ' completed';
+        if (allHumanComplete && banner) {{
+            banner.style.background = 'linear-gradient(135deg, #dcfce7, #bbf7d0)';
+            banner.style.borderColor = '#22c55e';
+            progressBar.style.background = '#22c55e';
+        }}
+    }}
 
     // Update ring color and assessment
     var assess = document.getElementById('score-assessment');
