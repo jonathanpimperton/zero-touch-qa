@@ -98,6 +98,26 @@ def init_db():
         print(f"[DB] Error initializing database: {e}")
 
 
+def db_clear_all():
+    """Clear all scan data and reset the scan ID sequence to 1.
+
+    Use for testing/demo resets. Irreversible.
+    """
+    if not is_db_available():
+        return False
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE TABLE scans, scan_id_map, human_reviews RESTART IDENTITY CASCADE")
+                cur.execute("ALTER SEQUENCE scan_id_seq RESTART WITH 1")
+        print("[DB] Cleared all scan data and reset sequence to 1")
+        return True
+    except Exception as e:
+        print(f"[DB] Error clearing database: {e}")
+        return False
+
+
 def db_get_scan_id(site_url: str, phase: str) -> str | None:
     """Get or create a scan ID for a site+phase combination.
 

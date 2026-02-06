@@ -1706,17 +1706,33 @@ def api_scan():
 # Routes - Admin
 # ---------------------------------------------------------------------------
 
-@app.route("/admin/clear-history", methods=["POST"])
+@app.route("/admin/clear-history", methods=["POST", "GET"])
 def admin_clear_history():
     """
-    Clear all scan history from the database.
+    Clear all scan history from the database and reset scan ID to 1.
 
-    Requires admin key via X-Admin-Key header or admin_key in POST body.
-    Set ADMIN_KEY environment variable to enable this endpoint.
+    Access methods:
+    1. GET with ?confirm=reset (simple, for hackathon testing)
+    2. POST with admin key (production)
     """
+    # Simple reset for hackathon testing - GET with confirm param
+    if request.method == "GET" and request.args.get("confirm") == "reset":
+        try:
+            from db import db_clear_all
+            if db_clear_all():
+                return jsonify({
+                    "status": "success",
+                    "message": "Scan history cleared and sequence reset to 1"
+                }), 200
+            else:
+                return jsonify({"error": "Database not available"}), 500
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # Production reset - POST with admin key
     admin_key = os.environ.get("ADMIN_KEY", "")
     if not admin_key:
-        return jsonify({"error": "Admin endpoint not configured"}), 403
+        return jsonify({"error": "Admin endpoint not configured. Use GET ?confirm=reset for testing."}), 403
 
     # Check for admin key in header or body
     provided_key = request.headers.get("X-Admin-Key") or ""
@@ -1727,23 +1743,16 @@ def admin_clear_history():
     if provided_key != admin_key:
         return jsonify({"error": "Invalid admin key"}), 403
 
-    # Clear the database
+    # Clear the database using the proper function that handles everything
     try:
-        from db import get_connection
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM scans")
-                scans_deleted = cur.rowcount
-                cur.execute("DELETE FROM scan_id_map")
-                mappings_deleted = cur.rowcount
-                cur.execute("ALTER SEQUENCE scan_id_seq RESTART WITH 1")
-            conn.commit()
-        return jsonify({
-            "status": "success",
-            "scans_deleted": scans_deleted,
-            "mappings_deleted": mappings_deleted,
-            "message": "Scan history cleared and sequence reset"
-        }), 200
+        from db import db_clear_all
+        if db_clear_all():
+            return jsonify({
+                "status": "success",
+                "message": "Scan history cleared and sequence reset to 1"
+            }), 200
+        else:
+            return jsonify({"error": "Database not available"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
