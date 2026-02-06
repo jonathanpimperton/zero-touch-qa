@@ -67,7 +67,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 | `.env` | Credentials and API keys. Never committed. |
 | `.gitignore` | Excludes `.env`, `__pycache__`, `reports/`, `*.xlsx`, `*.pdf`, `*.pptx`, and temp files from version control. |
 | `requirements.txt` | Python dependencies including gunicorn, playwright, and psycopg2-binary for production deployment. |
-| `Dockerfile` | Container config for cloud deployment. Includes Chromium for Playwright headless browser. |
+| `Dockerfile` | Container config for cloud deployment. Uses `playwright install --with-deps chromium` for proper browser installation with all system dependencies. |
 | `render.yaml` | Render.com deployment configuration. Uses Docker runtime. Includes PostgreSQL database service definition. |
 | `Procfile` | Heroku/Railway-compatible process file. |
 
@@ -186,7 +186,7 @@ The scanner uses the LanguageTool API (free, no API key required) to check visib
 - Extracts visible text from each page (excluding nav, footer, scripts)
 - Sends text to LanguageTool for analysis
 - **Spelling errors** = red FAIL (loses points). Deduplicated by word: each misspelled word appears once with occurrence count and list of pages. Proper nouns, brand names, and capitalized words are automatically filtered out.
-- **Medical/veterinary term filtering** uses pattern matching (medical prefixes like micro-, endo-, cardio- and suffixes like -ectomy, -ology, -itis, -worm) instead of a manual allowlist. This automatically accepts domain-specific terminology without needing to add individual words.
+- **Medical/veterinary term filtering** uses pattern matching (medical prefixes like micro-, endo-, cardio- and suffixes like -ectomy, -ology, -itis, -worm) plus a small allowlist for domain terms that don't fit patterns (gumline, rehabilitator, spay, neuter, etc.). This automatically accepts domain-specific terminology.
 - **Grammar issues** = yellow WARNING (no point loss). Deduplicated by message type with occurrence count.
 - Checks ALL pages (not limited to 5) using exponential backoff with retry on rate limits
 - Automatically retries with increasing delays (1s, 2s, 4s) when rate-limited by LanguageTool API
@@ -310,7 +310,7 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
 - `ADMIN_KEY` - Secret key for admin endpoints like `/admin/clear-history`. Set via Render dashboard or `.env`.
-- `GEMINI_API_KEY` - Google Gemini API key for AI-powered vision checks (primary). Enables image appropriateness and visual consistency analysis. Get a free key from Google AI Studio (ai.google.dev). This is the recommended AI provider.
+- `GEMINI_API_KEY` - Google Gemini API key for AI-powered vision checks (primary). Uses the `google-genai` SDK (not the deprecated `google-generativeai`). Enables image appropriateness and visual consistency analysis. Get a free key from Google AI Studio (ai.google.dev). This is the recommended AI provider.
 - `ANTHROPIC_API_KEY` - Anthropic API key for AI-powered checks (fallback). Used if Gemini is not configured. Requires Claude credits.
 
 ## AI-Powered Checks
