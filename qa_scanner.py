@@ -3303,6 +3303,7 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
     Verify map iframe location matches the clinic address on the page.
     Replaces HUMAN-018 (map location correct).
     Uses Nominatim (OpenStreetMap) for free geocoding.
+    Uses Playwright to find JS-rendered maps.
     """
     # Find pages with contact info or maps
     address_pattern = re.compile(
@@ -3314,6 +3315,7 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
     page_address = None
     map_page_url = None
 
+    # First try to find map in crawled pages (static HTML)
     for url, page in pages.items():
         if not page.soup:
             continue
@@ -3324,13 +3326,14 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
             src = iframe.get("src", "")
             if "google.com/maps" in src or "maps.google" in src:
                 # Extract coordinates from embed URL
-                # Format: !2d-122.4194!3d37.7749 or q=lat,lng or center=lat,lng
-                coord_match = re.search(r'!3d(-?\d+\.?\d*)!2d(-?\d+\.?\d*)', src)
+                # Format: !2d-81.39 (longitude) !3d40.79 (latitude) or q=lat,lng or center=lat,lng
+                coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
                 if coord_match:
-                    map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                    # !2d is longitude, !3d is latitude
+                    map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))  # (lat, lon)
                     map_page_url = url
                 else:
-                    # Try q= or center= format
+                    # Try q= or center= format (lat,lng)
                     coord_match = re.search(r'(?:q=|center=)(-?\d+\.?\d*),(-?\d+\.?\d*)', src)
                     if coord_match:
                         map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
@@ -3341,6 +3344,41 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
         addr_match = address_pattern.search(text)
         if addr_match:
             page_address = addr_match.group(0).strip()
+
+    # If no map found, try Playwright for JS-rendered maps (contact pages often load maps via JS)
+    if not map_coords and PLAYWRIGHT_AVAILABLE:
+        contact_pages = [url for url in pages.keys() if any(x in url.lower() for x in ['contact', 'location', 'about', 'find-us'])]
+        if contact_pages:
+            try:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-setuid-sandbox"],
+                    )
+                    for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
+                        try:
+                            pw_page = browser.new_page()
+                            pw_page.goto(contact_url, timeout=15000)
+                            pw_page.wait_for_load_state("networkidle", timeout=10000)
+                            html = pw_page.content()
+                            pw_page.close()
+
+                            # Look for Google Maps embed URL in rendered HTML
+                            map_url_matches = re.findall(r'google\.com/maps/embed\?pb=[^"\'>\s]+', html)
+                            for src in map_url_matches:
+                                coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
+                                if coord_match:
+                                    # !2d is longitude, !3d is latitude
+                                    map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
+                                    map_page_url = contact_url
+                                    break
+                            if map_coords:
+                                break
+                        except Exception:
+                            continue
+                    browser.close()
+            except Exception:
+                pass
 
     if not map_coords:
         # No map on the site - nothing to check
