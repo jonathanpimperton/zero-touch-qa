@@ -132,37 +132,54 @@ def generate_html_report(report) -> str:
     has_critical = len(critical_failures) > 0
 
     # Score color & assessment
-    # Rule: "Ready for Delivery" only if score 95+ AND zero failures
+    # Rule: Show "Complete Human Review" until all human items are reviewed
+    # Rule: "Ready for Delivery" only if score 95+ AND zero failures AND human review complete
     # Rule: Critical failures (weight 5) always show amber, never green
-    if report.score >= 95 and not has_failures:
-        score_color = "#16a34a"
-        score_bg = "#dcfce7"
-        assessment = "Ready for Delivery"
-        ring_color = "#22c55e"
-    elif has_critical:
+    has_pending_human_review = human_review > 0
+
+    if has_critical:
         # Critical failures always amber regardless of score
         score_color = "#d97706"
         score_bg = "#fef3c7"
         assessment = "Critical Issues - Fix Before Delivery"
         ring_color = "#f59e0b"
+    elif has_failures:
+        if report.score >= 85:
+            score_color = "#65a30d"
+            score_bg = "#ecfccb"
+            assessment = "Minor Issues - Fix Before Delivery"
+            ring_color = "#84cc16"
+        elif report.score >= 70:
+            score_color = "#d97706"
+            score_bg = "#fef3c7"
+            assessment = "Needs Work - Several Issues"
+            ring_color = "#f59e0b"
+        else:
+            score_color = "#dc2626"
+            score_bg = "#fecaca"
+            assessment = "Significant Issues - Major Rework"
+            ring_color = "#ef4444"
+    elif has_pending_human_review:
+        # No failures but human review pending - show blue/pending state
+        score_color = "#5820BA"
+        score_bg = "#FAF5FF"
+        assessment = "Complete Human Review Checklist"
+        ring_color = "#5820BA"
+    elif report.score >= 95:
+        score_color = "#16a34a"
+        score_bg = "#dcfce7"
+        assessment = "Ready for Delivery"
+        ring_color = "#22c55e"
     elif report.score >= 85:
         score_color = "#65a30d"
         score_bg = "#ecfccb"
-        if has_failures:
-            assessment = "Minor Issues - Fix Before Delivery"
-        else:
-            assessment = "Almost Ready - Review Warnings"
+        assessment = "Almost Ready - Review Warnings"
         ring_color = "#84cc16"
-    elif report.score >= 70:
+    else:
         score_color = "#d97706"
         score_bg = "#fef3c7"
-        assessment = "Needs Work - Several Issues"
+        assessment = "Review Warnings Before Delivery"
         ring_color = "#f59e0b"
-    else:
-        score_color = "#dc2626"
-        score_bg = "#fecaca"
-        assessment = "Significant Issues - Major Rework"
-        ring_color = "#ef4444"
 
     # SVG score ring
     pct = max(0, min(100, report.score))
@@ -971,30 +988,51 @@ function recalcScore() {{
     // Update ring
     var offset = circumference * (1 - newScore / 100);
     document.getElementById('score-ring').setAttribute('stroke-dashoffset', offset);
+    // Check if all human reviews are complete
+    var totalHumanItems = Object.keys(humanStatuses).length;
+    var completedItems = 0;
+    var hasHumanFails = false;
+    for (var idx in humanStatuses) {{
+        if (humanStatuses[idx] !== null) completedItems++;
+        if (humanStatuses[idx] === 'fail') hasHumanFails = true;
+    }}
+    var allHumanComplete = (completedItems === totalHumanItems);
+
     // Update ring color and assessment
     var assess = document.getElementById('score-assessment');
     var ring = document.getElementById('score-ring');
     var scoreText = document.getElementById('score-value');
-    if (newScore >= 95) {{
+
+    // Determine assessment based on score AND human review completion
+    if (hasHumanFails || newScore < 95) {{
+        // Has issues from human review or low score
+        if (newScore >= 85) {{
+            assess.textContent = 'Minor Issues - Fix Before Delivery';
+            assess.style.background = '#ecfccb'; assess.style.color = '#65a30d';
+            ring.setAttribute('stroke', '#84cc16'); scoreText.setAttribute('fill', '#65a30d');
+        }} else if (newScore >= 70) {{
+            assess.textContent = 'Needs Work - Several Issues';
+            assess.style.background = '#fef3c7'; assess.style.color = '#d97706';
+            ring.setAttribute('stroke', '#f59e0b'); scoreText.setAttribute('fill', '#d97706');
+        }} else {{
+            assess.textContent = 'Significant Issues - Major Rework';
+            assess.style.background = '#fecaca'; assess.style.color = '#dc2626';
+            ring.setAttribute('stroke', '#ef4444'); scoreText.setAttribute('fill', '#dc2626');
+        }}
+    }} else if (!allHumanComplete) {{
+        // Score OK but human review not complete
+        assess.textContent = 'Complete Human Review (' + completedItems + '/' + totalHumanItems + ')';
+        assess.style.background = '#FAF5FF'; assess.style.color = '#5820BA';
+        ring.setAttribute('stroke', '#5820BA'); scoreText.setAttribute('fill', '#5820BA');
+    }} else {{
+        // All good - ready for delivery
         assess.textContent = 'Ready for Delivery';
         assess.style.background = '#dcfce7'; assess.style.color = '#16a34a';
         ring.setAttribute('stroke', '#22c55e'); scoreText.setAttribute('fill', '#16a34a');
-    }} else if (newScore >= 85) {{
-        assess.textContent = 'Minor Issues - Fix Before Delivery';
-        assess.style.background = '#ecfccb'; assess.style.color = '#65a30d';
-        ring.setAttribute('stroke', '#84cc16'); scoreText.setAttribute('fill', '#65a30d');
-    }} else if (newScore >= 70) {{
-        assess.textContent = 'Needs Work - Several Issues';
-        assess.style.background = '#fef3c7'; assess.style.color = '#d97706';
-        ring.setAttribute('stroke', '#f59e0b'); scoreText.setAttribute('fill', '#d97706');
-    }} else {{
-        assess.textContent = 'Significant Issues - Major Rework';
-        assess.style.background = '#fecaca'; assess.style.color = '#dc2626';
-        ring.setAttribute('stroke', '#ef4444'); scoreText.setAttribute('fill', '#dc2626');
     }}
     // Show score change indicator
     if (lost > 0) {{
-        assess.textContent += ' (human review: -' + lost + ' pts)';
+        assess.textContent += ' (-' + lost + ' pts from human review)';
     }}
 }}
 
