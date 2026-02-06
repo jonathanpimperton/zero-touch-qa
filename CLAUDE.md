@@ -73,7 +73,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 ## Cloud Deployment
 
 **Live app**: https://zero-touch-qa.onrender.com
-**GitHub repo**: https://github.com/jonathanpimperton/zero-touch-qa (private)
+**GitHub repo**: https://github.com/jonathanpimperton/zero-touch-qa (public)
 
 The app is deployed on Render.com (free tier) via Docker. Pushing to `main` on GitHub triggers an automatic redeploy. Environment variables (`PSI_API_KEY`) are set in the Render dashboard. The `render.yaml` also defines a free PostgreSQL database (`zero-touch-qa-db`) that Render provisions automatically and links via `DATABASE_URL`.
 
