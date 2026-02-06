@@ -378,7 +378,7 @@ Note: PDF generation requires adding WeasyPrint or a similar library in producti
 
 ## Hackathon Deliverables
 
-1. **Working prototype** - Flask web app with 66 check functions across 122 rules (89 automated, 33 human review) covering all 8 partners, grammar/spelling, broken images, social sharing, mixed content, WordPress back-end checks, real scan results
+1. **Working prototype** - Flask web app with 74 check functions across 122 rules (100 automated, 22 human review) covering all 8 partners, grammar/spelling, broken images, social sharing, mixed content, WordPress back-end checks, AI vision checks, real scan results
 2. **Professional proposal** - `proposal.html` (18-slide deck with embedded screenshots, includes WordPress plugin explanation, print to PDF via browser)
 3. **Demo results** - Scans of both provided test sites with real scores
 4. **Cloud-ready** - Dockerfile + Render.com config with PostgreSQL for persistent storage

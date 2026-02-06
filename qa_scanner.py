@@ -820,6 +820,153 @@ def check_placeholder_text(pages: dict, rule: dict) -> list[CheckResult]:
     return results
 
 
+def check_long_text_blocks(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    Check for long paragraphs that aren't broken up with subheads, bullets, or visual elements.
+    Flags paragraphs over 150 words that may be hard to read.
+    """
+    issues = []
+    max_words = 150
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        paragraphs = page.soup.find_all("p")
+        for p in paragraphs:
+            text = p.get_text(strip=True)
+            word_count = len(text.split())
+            if word_count > max_words:
+                # Check if it's in main content (not footer/nav)
+                parent_classes = " ".join(p.get("class", []))
+                if "footer" in parent_classes.lower() or "nav" in parent_classes.lower():
+                    continue
+                issues.append(f"{url}: Paragraph with {word_count} words")
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"Found {len(issues)} long text block(s) that could be broken up:\n" + "\n".join(issues[:5]),
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No excessively long text blocks found. Content appears well-structured.",
+    )]
+
+
+def check_outcome_promises(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    Check for marketing language that promises specific outcomes.
+    Veterinary sites should avoid guarantees about treatment results.
+    """
+    promise_patterns = [
+        r"\bguarantee[sd]?\b",
+        r"\bpromise[sd]?\b",
+        r"\bwill cure\b",
+        r"\b100%\s+(effective|success|cure)",
+        r"\bprolong(s|ing)?\s+(the\s+)?life\b",
+        r"\bensure[sd]?\s+(your\s+pet|recovery)",
+        r"\bcertain\s+to\b",
+        r"\balways\s+(work|succeed|cure)",
+    ]
+
+    issues = []
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Get visible text
+        body = page.soup.find("body")
+        if not body:
+            continue
+
+        text = body.get_text(" ", strip=True).lower()
+
+        for pattern in promise_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                issues.append(f"{url}: Found '{matches[0]}'")
+                break  # One issue per page is enough
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"Found {len(issues)} page(s) with outcome promise language:\n" + "\n".join(issues[:5]) + "\n\nAvoid guaranteeing specific treatment outcomes.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="No inappropriate outcome promises found.",
+    )]
+
+
+def check_internal_links(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    Check that pages have internal links to other site content.
+    Good internal linking helps users navigate and improves SEO.
+    """
+    if not pages:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="SKIP", weight=rule["weight"],
+            details="No pages to check",
+        )]
+
+    # Get base domain
+    any_url = next(iter(pages.keys()), "")
+    parsed_base = urllib.parse.urlparse(any_url)
+    base_domain = parsed_base.netloc
+
+    pages_without_links = []
+
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+
+        # Skip home page (it naturally has fewer internal links from nav)
+        if urllib.parse.urlparse(url).path in ("/", ""):
+            continue
+
+        # Find internal links in main content (not nav/footer)
+        body = page.soup.find("body")
+        if not body:
+            continue
+
+        # Count internal links in main content area
+        internal_links = 0
+        for a in body.find_all("a", href=True):
+            href = a.get("href", "")
+            # Skip nav/footer/header links
+            parent_classes = " ".join(a.find_parent().get("class", []) if a.find_parent() else [])
+            if any(x in parent_classes.lower() for x in ["nav", "footer", "header", "menu"]):
+                continue
+
+            if href.startswith("/") or base_domain in href:
+                internal_links += 1
+
+        if internal_links < 2:
+            pages_without_links.append(url)
+
+    if len(pages_without_links) > len(pages) * 0.3:  # More than 30% lacking links
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"{len(pages_without_links)} pages have few internal content links:\n" + "\n".join(pages_without_links[:5]),
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details="Pages have adequate internal linking.",
+    )]
+
+
 def check_favicon(pages: dict, rule: dict) -> list[CheckResult]:
     """Check that a favicon is set."""
     results = []
@@ -3242,6 +3389,279 @@ def check_branding_consistency(pages: dict, rule: dict) -> list[CheckResult]:
     )]
 
 
+def check_no_medical_equipment(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    AI-powered check for medical equipment in photos (WVP-011).
+    Flags images showing syringes, gloves, or inappropriate medical gear.
+    """
+    if not AI_PROVIDER:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="AI image analysis not available. Manually check photos for syringes, gloves, or medical equipment.",
+        )]
+
+    issues = []
+    checked_images = 0
+
+    prompt = """Analyze this veterinary clinic website image.
+Check if it shows any of these inappropriate items:
+- Syringes or needles
+- Medical gloves (latex/nitrile)
+- Bloody or graphic medical scenes
+- Surgical instruments visible in concerning way
+
+If the image shows pets, staff, facilities, or general veterinary care without concerning medical equipment visible, respond: APPROPRIATE
+
+If concerning medical equipment is prominently visible, respond: INAPPROPRIATE: [describe what's visible]
+
+Be lenient - normal exam room backgrounds are fine. Only flag prominent/concerning items."""
+
+    for url, page in list(pages.items())[:5]:  # Limit pages
+        if not page.soup:
+            continue
+
+        images = page.soup.find_all("img")
+        for img in images[:8]:  # Limit images per page
+            src = img.get("src", "")
+            if not src or "icon" in src.lower() or "logo" in src.lower() or len(src) < 10:
+                continue
+
+            # Make absolute URL
+            if src.startswith("/"):
+                parsed = urllib.parse.urlparse(url)
+                src = f"{parsed.scheme}://{parsed.netloc}{src}"
+            elif not src.startswith("http"):
+                continue
+
+            try:
+                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
+                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                    continue
+
+                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                if result_text is None:
+                    continue
+
+                checked_images += 1
+                if result_text.startswith("INAPPROPRIATE"):
+                    issues.append(f"{url}: {src[-50:]} - {result_text}")
+
+            except Exception:
+                continue
+
+    ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="FAIL", weight=rule["weight"],
+            details=f"[{ai_name} Vision] Found medical equipment in photos:\n" + "\n".join(issues[:5]),
+        )]
+
+    if checked_images == 0:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="Could not analyze images. Manual review needed.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details=f"[{ai_name} Vision] Checked {checked_images} images. No inappropriate medical equipment found.",
+    )]
+
+
+def check_stock_imagery_euthanasia(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    AI-powered check that euthanasia/end-of-life pages use stock imagery only (WVP-013).
+    Flags real pet photos on sensitive pages.
+    """
+    if not AI_PROVIDER:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="AI image analysis not available. Manually verify euthanasia pages use stock imagery only.",
+        )]
+
+    # Find euthanasia/end-of-life pages
+    sensitive_keywords = ["euthanasia", "end-of-life", "end of life", "goodbye", "memorial", "loss", "grief"]
+    sensitive_pages = []
+
+    for url, page in pages.items():
+        url_lower = url.lower()
+        if any(kw in url_lower for kw in sensitive_keywords):
+            sensitive_pages.append((url, page))
+            continue
+        if page.soup:
+            title = page.soup.find("title")
+            if title and any(kw in title.get_text().lower() for kw in sensitive_keywords):
+                sensitive_pages.append((url, page))
+
+    if not sensitive_pages:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details="No euthanasia/end-of-life pages found requiring stock imagery check.",
+        )]
+
+    issues = []
+    checked_images = 0
+
+    prompt = """This image is on a veterinary euthanasia/end-of-life memorial page.
+
+Determine if this appears to be:
+1. STOCK PHOTO - Professional studio lighting, generic/posed pets, watermark remnants, overly perfect composition
+2. REAL PET PHOTO - Casual setting, personal/candid shot, specific identifiable pet, home environment
+
+Stock photos, nature scenes, candles, abstract comfort imagery, and illustrations are APPROPRIATE.
+Real photos of specific pets that appear to be client-submitted memorial photos are INAPPROPRIATE for this context.
+
+Respond: STOCK (appropriate) or REAL_PET: [brief reason why it appears to be a real pet photo]"""
+
+    for url, page in sensitive_pages[:2]:  # Limit to 2 pages
+        if not page.soup:
+            continue
+
+        images = page.soup.find_all("img")
+        for img in images[:5]:
+            src = img.get("src", "")
+            if not src or "icon" in src.lower() or "logo" in src.lower():
+                continue
+
+            if src.startswith("/"):
+                parsed = urllib.parse.urlparse(url)
+                src = f"{parsed.scheme}://{parsed.netloc}{src}"
+            elif not src.startswith("http"):
+                continue
+
+            try:
+                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
+                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                    continue
+
+                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                if result_text is None:
+                    continue
+
+                checked_images += 1
+                if result_text.startswith("REAL_PET"):
+                    issues.append(f"{url}: {src[-40:]} - {result_text}")
+
+            except Exception:
+                continue
+
+    ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"[{ai_name} Vision] Possible real pet photos on euthanasia pages (should use stock only):\n" + "\n".join(issues[:3]),
+        )]
+
+    if checked_images == 0 and sensitive_pages:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=f"Found {len(sensitive_pages)} euthanasia page(s) but could not analyze images.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details=f"[{ai_name} Vision] Checked {checked_images} images on {len(sensitive_pages)} euthanasia page(s). All appear to be appropriate stock imagery.",
+    )]
+
+
+def check_image_cropping(pages: dict, rule: dict) -> list[CheckResult]:
+    """
+    AI-powered check for image cropping issues (HUMAN-015).
+    Verifies subjects are properly visible and not cut off.
+    """
+    if not AI_PROVIDER:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="AI image analysis not available. Manually check image cropping on all devices.",
+        )]
+
+    issues = []
+    checked_images = 0
+
+    prompt = """Analyze this website image for cropping problems.
+
+Check if:
+1. Main subjects (people, pets, buildings) are fully visible or appropriately framed
+2. Important elements are not awkwardly cut off at edges
+3. Faces/heads are not cropped at unfortunate points
+4. The composition looks intentional, not accidentally cropped
+
+If the image is well-cropped with subjects properly visible, respond: GOOD
+
+If there are obvious cropping problems, respond: CROPPING_ISSUE: [describe the problem, e.g., "person's head cut off at forehead", "pet's body truncated awkwardly"]
+
+Be lenient - artistic crops and intentional close-ups are fine. Only flag obvious problems."""
+
+    # Check hero images and featured images on key pages
+    for url, page in list(pages.items())[:5]:
+        if not page.soup:
+            continue
+
+        # Focus on larger/featured images
+        images = page.soup.find_all("img")
+        for img in images[:6]:
+            src = img.get("src", "")
+            # Skip tiny images, icons
+            if not src or "icon" in src.lower() or "logo" in src.lower():
+                continue
+
+            if src.startswith("/"):
+                parsed = urllib.parse.urlparse(url)
+                src = f"{parsed.scheme}://{parsed.netloc}{src}"
+            elif not src.startswith("http"):
+                continue
+
+            try:
+                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
+                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                    continue
+
+                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                if result_text is None:
+                    continue
+
+                checked_images += 1
+                if result_text.startswith("CROPPING_ISSUE"):
+                    issues.append(f"{url}: {result_text}")
+
+            except Exception:
+                continue
+
+    ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
+
+    if issues:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details=f"[{ai_name} Vision] Potential image cropping issues:\n" + "\n".join(issues[:5]),
+        )]
+
+    if checked_images == 0:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details="Could not analyze images for cropping. Manual review needed.",
+        )]
+
+    return [CheckResult(
+        rule_id=rule["id"], category=rule["category"],
+        check=rule["check"], status="PASS", weight=rule["weight"],
+        details=f"[{ai_name} Vision] Checked {checked_images} images. No obvious cropping issues found.",
+    )]
+
+
 # =============================================================================
 # CHECK FUNCTION REGISTRY
 # =============================================================================
@@ -3277,6 +3697,10 @@ CHECK_FUNCTIONS = {
     "check_open_graph": check_open_graph,
     "check_mixed_content": check_mixed_content,
     "check_meta_title_quality": check_meta_title_quality,
+    # Content quality checks
+    "check_long_text_blocks": check_long_text_blocks,
+    "check_outcome_promises": check_outcome_promises,
+    "check_internal_links": check_internal_links,
     # Partner-specific: Western
     "check_cta_text": check_cta_text,
     "check_cta_on_pages": check_cta_on_pages,
@@ -3323,6 +3747,10 @@ CHECK_FUNCTIONS = {
     "check_image_appropriateness": check_image_appropriateness,
     "check_visual_consistency": check_visual_consistency,
     "check_branding_consistency": check_branding_consistency,
+    # AI-powered photo checks (Western + universal)
+    "check_no_medical_equipment": check_no_medical_equipment,
+    "check_stock_imagery_euthanasia": check_stock_imagery_euthanasia,
+    "check_image_cropping": check_image_cropping,
 }
 
 # Import WordPress API check functions and merge

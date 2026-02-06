@@ -97,7 +97,7 @@ Final sign-off
 
 ## 3. What Is Fully Automated vs. Human-Reviewed
 
-### Fully Automated (89 checks implemented across all 8 partners)
+### Fully Automated (100 checks implemented across all 8 partners)
 
 | Category | Checks | Examples |
 |----------|--------|----------|
@@ -252,7 +252,7 @@ with the most automatable checks, so it demonstrates the biggest impact.
         |                         |            |
   qa_rules.py              qa_scanner.py    wp_api.py
   (122 rules, partner      (site crawler +  (WordPress
-   overlays, phase          66 check         REST API
+   overlays, phase          74 check         REST API
    filtering)               functions)       client)
                                  |
                            qa_report.py
@@ -282,8 +282,8 @@ with the most automatable checks, so it demonstrates the biggest impact.
 | File | Description |
 |------|-------------|
 | `app.py` | Web app + Wrike webhook -- the main thing users interact with |
-| `qa_rules.py` | Rule engine with 122 rules (89 automated, 33 human review), all 8 partner overlays, phase filtering |
-| `qa_scanner.py` | Site crawler + 66 automated check functions |
+| `qa_rules.py` | Rule engine with 122 rules (100 automated, 22 human review), all 8 partner overlays, phase filtering |
+| `qa_scanner.py` | Site crawler + 74 automated check functions |
 | `wp_api.py` | WordPress API client for back-end checks (plugins, themes, timezone, media, forms) |
 | `petdesk-qa-plugin.zip` | WordPress plugin for back-end checks -- install on each site |
 | `qa_report.py` | HTML report, Wrike comment, and JSON audit trail generators |
