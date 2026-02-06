@@ -151,7 +151,12 @@ class SiteCrawler:
             return self._browser
         try:
             self._playwright_instance = sync_playwright().start()
-            launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+            launch_args = [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-setuid-sandbox",
+            ]
             # --single-process helps in Docker containers but can crash on Windows
             if os.environ.get("DOCKER_CONTAINER"):
                 launch_args.append("--single-process")
@@ -1429,7 +1434,13 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
         playwright_instance = sync_playwright().start()
         browser = playwright_instance.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--single-process",
+                "--disable-setuid-sandbox",
+            ],
         )
 
         forms_skipped_captcha = []
@@ -3214,7 +3225,16 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--single-process",
+                    "--disable-setuid-sandbox",
+                ],
+            )
 
             for vp in viewports:
                 try:
@@ -3386,15 +3406,15 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
 def _analyze_image_with_ai(image_bytes: bytes, prompt: str) -> str:
     """Helper to analyze an image using Gemini (primary) or Anthropic (fallback)."""
     import base64
+    from google.genai import types
 
     if AI_PROVIDER == "gemini":
         client = genai.Client(api_key=GEMINI_API_KEY)
-        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                 prompt,
-                {"mime_type": "image/jpeg", "data": img_b64}
             ]
         )
         return response.text.strip()
@@ -3569,7 +3589,16 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
     try:
         # Take screenshot
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--single-process",
+                    "--disable-setuid-sandbox",
+                ],
+            )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 user_agent=USER_AGENT
