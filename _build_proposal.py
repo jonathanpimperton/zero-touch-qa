@@ -183,7 +183,7 @@ def main():
             </table>
             <div>
                 <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 10px; margin-bottom: 10px;">
-                    <h3 style="color: #5820BA; font-size: 11px; margin-bottom: 6px;">AI-Powered Checks (Claude Vision)</h3>
+                    <h3 style="color: #5820BA; font-size: 11px; margin-bottom: 6px;">AI-Powered Checks (Gemini Vision)</h3>
                     <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
                         <li>Image appropriateness on sensitive pages</li>
                         <li>Visual consistency (alignment, spacing, colors)</li>
@@ -489,7 +489,7 @@ def main():
             <div class="card" style="padding: 10px 12px;">
                 <h3 style="color: #22c55e; font-size: 12px; margin-bottom: 6px;">External APIs</h3>
                 <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
-                    <li><strong>Claude Vision API</strong> &mdash; AI image &amp; visual analysis</li>
+                    <li><strong>Gemini Vision API</strong> &mdash; AI image &amp; visual analysis</li>
                     <li><strong>LanguageTool API</strong> &mdash; Grammar/spelling (free)</li>
                     <li><strong>Nominatim/OSM</strong> &mdash; Address geocoding (free)</li>
                     <li><strong>PageSpeed Insights</strong> &mdash; Performance scoring</li>

@@ -3065,10 +3065,11 @@ Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
             details=f"Found {len(sensitive_pages)} sensitive page(s) but could not analyze images. Manual review needed.",
         )]
 
+    ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
     return [CheckResult(
         rule_id=rule["id"], category=rule["category"],
         check=rule["check"], status="PASS", weight=rule["weight"],
-        details=f"Analyzed {checked_images} images on {len(sensitive_pages)} sensitive page(s). All images appear appropriate.",
+        details=f"[{ai_name} Vision] Analyzed {checked_images} images on {len(sensitive_pages)} sensitive page(s). All images appear appropriate.",
     )]
 
 
@@ -3150,24 +3151,25 @@ Be concise. Only flag clear, noticeable problems - not minor variations."""
                 details="AI analysis returned no result. Manual review needed.",
             )]
 
+        ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
         if result_text.startswith("PASS"):
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details="AI analysis: Homepage shows consistent alignment, spacing, and color usage.",
+                details=f"[{ai_name} Vision] Homepage shows consistent alignment, spacing, and color usage.",
             )]
         elif result_text.startswith("ISSUES"):
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="WARN", weight=rule["weight"],
-                details=f"AI analysis found potential issues: {result_text}",
+                details=f"[{ai_name} Vision] Found potential issues: {result_text}",
                 page_url=homepage_url,
             )]
         else:
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details=f"AI analysis: {result_text[:100]}",
+                details=f"[{ai_name} Vision] {result_text[:100]}",
             )]
 
     except Exception as e:
