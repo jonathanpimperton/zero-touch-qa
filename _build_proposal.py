@@ -173,7 +173,7 @@ def main():
                 </thead>
                 <tbody>
                     <tr><td style="padding: 5px 10px;">Template Text / Search-Replace</td><td style="padding: 5px 10px;">20</td></tr>
-                    <tr><td style="padding: 5px 10px;">Functionality (links, forms, phones)</td><td style="padding: 5px 10px;">10</td></tr>
+                    <tr><td style="padding: 5px 10px;">Functionality (links, form submission, phones)</td><td style="padding: 5px 10px;">10</td></tr>
                     <tr><td style="padding: 5px 10px;">Content, SEO &amp; Metadata</td><td style="padding: 5px 10px;">15</td></tr>
                     <tr><td style="padding: 5px 10px;">Footer, Navigation &amp; Craftsmanship</td><td style="padding: 5px 10px;">10</td></tr>
                     <tr><td style="padding: 5px 10px;">WordPress Backend (via plugin)</td><td style="padding: 5px 10px;">5</td></tr>
@@ -247,7 +247,7 @@ def main():
             <div style="font-size: 32px; color: #5820BA;">→</div>
             <div class="big-flow-box" style="background: #22c55e;">
                 <div class="big-flow-title">Scanner reads the website</div>
-                <div class="big-flow-subtitle">Crawls pages, checks against QA rules</div>
+                <div class="big-flow-subtitle">Real-time progress as it crawls &amp; checks</div>
             </div>
             <div style="font-size: 32px; color: #5820BA;">→</div>
             <div class="big-flow-box" style="background: #2DCCE8;">
@@ -492,7 +492,7 @@ def main():
             <div class="card" style="padding: 10px 12px;">
                 <h3 style="color: #22c55e; font-size: 12px; margin-bottom: 6px;">External APIs</h3>
                 <ul style="font-size: 10px; line-height: 1.5; padding-left: 14px; margin: 0;">
-                    <li><strong>Gemini Vision API</strong> &mdash; AI image &amp; visual analysis</li>
+                    <li><strong>Gemini 2.0 Flash</strong> &mdash; AI image &amp; visual analysis</li>
                     <li><strong>LanguageTool API</strong> &mdash; Grammar/spelling (free)</li>
                     <li><strong>Nominatim/OSM</strong> &mdash; Address geocoding (free)</li>
                     <li><strong>PageSpeed Insights</strong> &mdash; Performance scoring</li>
@@ -555,7 +555,7 @@ def main():
                 </div>
                 <div class="card" style="font-size: 12px;">
                     <h3 style="font-size: 13px;">Email Delivery Verification</h3>
-                    <p style="line-height: 1.5;">Form submissions are tested, but verifying emails actually reach the inbox requires mailbox integration.</p>
+                    <p style="line-height: 1.5;">Form submissions are tested via Playwright, but verifying emails reach the inbox requires mailbox integration.</p>
                 </div>
             </div>
             <div>
