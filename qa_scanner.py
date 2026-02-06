@@ -3343,10 +3343,11 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
             page_address = addr_match.group(0).strip()
 
     if not map_coords:
+        # No map on the site - nothing to check
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
-            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-            details="No map iframe with coordinates found. Verify map location manually.",
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details="No Google Maps iframe found on site (not required).",
         )]
 
     if not page_address:
