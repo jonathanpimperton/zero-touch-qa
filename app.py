@@ -14,7 +14,7 @@ import threading
 from datetime import datetime
 
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
 
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
 from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS
@@ -110,7 +110,7 @@ def _get_scan_id(site_url: str, phase: str) -> str:
 # Core scan engine (shared between web UI and Wrike webhook)
 # ---------------------------------------------------------------------------
 
-def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> ScanReport:
+def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progress_callback=None) -> ScanReport:
     """Run the full QA scan against a site.
 
     Args:
@@ -118,46 +118,93 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> Sc
         partner: Partner name (e.g., 'western', 'independent')
         phase: Build phase ('prototype', 'full', 'final')
         max_pages: Maximum pages to crawl
+        progress_callback: Optional function(step, detail) to report progress
     """
+    def progress(step, detail=""):
+        if progress_callback:
+            progress_callback(step, detail)
+
+    progress("connecting", f"Connecting to {site_url}...")
     rules = get_rules_for_scan(partner, phase)
     auto_rules = get_automatable_rules(rules)
     human_rules = get_human_review_rules(rules)
 
     # Crawl
+    progress("crawling", "Crawling pages...")
     crawler = SiteCrawler(site_url)
     pages = crawler.crawl(max_pages=max_pages)
+    progress("crawling", f"Found {len(pages)} pages")
 
     # Try PetDesk QA Plugin first (recommended - single API key for all sites)
     # Falls back to HUMAN_REVIEW if plugin not installed
+    progress("wordpress", "Checking WordPress backend...")
     wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
     if not wp_client.is_available():
         wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
 
-    # Run checks
+    # Run checks - group by category for progress reporting
     all_results = []
+    checks_by_category = {}
     for rule in auto_rules:
-        fn_name = rule.get("check_fn")
-        if fn_name and fn_name in CHECK_FUNCTIONS:
-            fn = CHECK_FUNCTIONS[fn_name]
-            try:
-                # WordPress checks need the wp_client parameter
-                if fn_name in WP_CHECK_FUNCTIONS:
-                    results = fn(pages, rule, wp_client=wp_client)
-                else:
-                    results = fn(pages, rule)
-                all_results.extend(results)
-            except Exception as e:
+        cat = rule.get("category", "other")
+        if cat not in checks_by_category:
+            checks_by_category[cat] = []
+        checks_by_category[cat].append(rule)
+
+    # Define which categories map to which progress steps
+    category_steps = {
+        "grammar_spelling": ("grammar", "Checking grammar & spelling..."),
+        "functionality": ("checks", "Running functionality checks..."),
+        "content": ("checks", "Checking content..."),
+        "craftsmanship": ("checks", "Checking craftsmanship..."),
+        "search_replace": ("checks", "Checking for placeholder text..."),
+        "footer": ("checks", "Checking footer..."),
+        "navigation": ("checks", "Checking navigation..."),
+        "forms": ("checks", "Checking forms..."),
+        "partner_specific": ("checks", "Running partner-specific checks..."),
+    }
+
+    current_step = None
+    for cat, cat_rules in checks_by_category.items():
+        step_info = category_steps.get(cat, ("checks", f"Checking {cat}..."))
+        if step_info[0] != current_step:
+            current_step = step_info[0]
+            progress(current_step, step_info[1])
+
+        for rule in cat_rules:
+            fn_name = rule.get("check_fn")
+            # Special progress for AI and slow checks
+            if fn_name in ("check_image_appropriateness", "check_visual_consistency",
+                          "check_image_cropping", "check_branding_consistency"):
+                progress("ai", f"AI analyzing: {rule.get('check', '')[:40]}...")
+            elif fn_name == "check_grammar_spelling":
+                progress("grammar", "Checking grammar & spelling (all pages)...")
+            elif fn_name == "check_form_submission":
+                progress("checks", "Testing form submissions (Playwright)...")
+            elif fn_name == "check_responsive_viewports":
+                progress("checks", "Testing responsive viewports...")
+
+            if fn_name and fn_name in CHECK_FUNCTIONS:
+                fn = CHECK_FUNCTIONS[fn_name]
+                try:
+                    # WordPress checks need the wp_client parameter
+                    if fn_name in WP_CHECK_FUNCTIONS:
+                        results = fn(pages, rule, wp_client=wp_client)
+                    else:
+                        results = fn(pages, rule)
+                    all_results.extend(results)
+                except Exception as e:
+                    all_results.append(CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                        details=f"Automated check encountered an error. Verify manually. ({str(e)})",
+                    ))
+            else:
                 all_results.append(CheckResult(
                     rule_id=rule["id"], category=rule["category"],
                     check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                    details=f"Automated check encountered an error. Verify manually. ({str(e)})",
+                    details="Automated check not yet implemented. Verify manually.",
                 ))
-        else:
-            all_results.append(CheckResult(
-                rule_id=rule["id"], category=rule["category"],
-                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                details="Automated check not yet implemented. Verify manually.",
-            ))
 
     for rule in human_rules:
         all_results.append(CheckResult(
@@ -166,6 +213,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30) -> Sc
             details="Requires human judgment",
         ))
 
+    progress("report", "Generating report...")
     total_points_lost = sum(r.points_lost for r in all_results)
     score = max(0, 100 - total_points_lost)
 
@@ -501,33 +549,32 @@ HOME_PAGE = """<!DOCTYPE html>
             btn.innerHTML = '<span class="spinner"></span> Scanning...';
             status.style.display = 'block';
 
-            // Animated step-by-step progress
-            const steps = [
-                { text: 'Connecting to site...', icon: '🔗' },
-                { text: 'Crawling pages...', icon: '🕷️' },
-                { text: 'Rendering JS pages (Playwright)...', icon: '🌐' },
-                { text: 'Running QA checks...', icon: '✓' },
-                { text: 'Checking WordPress backend...', icon: '🔐' },
-                { text: 'Checking grammar & spelling (all pages)...', icon: '📝' },
-                { text: 'AI analyzing images (Gemini Vision)...', icon: '🤖' },
-                { text: 'Generating report...', icon: '📊' },
-            ];
-            let currentStep = 0;
+            // Step icons for each progress phase
+            const stepIcons = {
+                'starting': '🚀',
+                'connecting': '🔗',
+                'crawling': '🕷️',
+                'wordpress': '🔐',
+                'checks': '✓',
+                'grammar': '📝',
+                'ai': '🤖',
+                'report': '📊',
+                'complete': '✅',
+                'error': '❌',
+            };
 
-            function showStep() {
-                if (currentStep < steps.length) {
-                    const step = steps[currentStep];
-                    status.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;">' +
-                        '<span class="spinner" style="border-color:rgba(79,70,229,0.2);border-top-color:#4f46e5;width:22px;height:22px;"></span>' +
-                        '<span style="font-weight:600;color:#374151;">' + step.icon + ' ' + step.text + '</span></div>';
-                    currentStep++;
-                }
+            function showProgress(step, detail) {
+                const icon = stepIcons[step] || '⏳';
+                status.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;">' +
+                    '<span class="spinner" style="border-color:rgba(79,70,229,0.2);border-top-color:#4f46e5;width:22px;height:22px;"></span>' +
+                    '<span style="font-weight:600;color:#374151;">' + icon + ' ' + detail + '</span></div>';
             }
-            showStep();
-            const stepInterval = setInterval(showStep, 2000);  // Faster interval with more steps
+
+            showProgress('starting', 'Initializing scan...');
 
             try {
-                const resp = await fetch('/api/scan', {
+                // Use Server-Sent Events for real-time progress
+                const response = await fetch('/api/scan-stream', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -536,23 +583,46 @@ HOME_PAGE = """<!DOCTYPE html>
                         phase: document.getElementById('phase').value,
                     })
                 });
-                clearInterval(stepInterval);
-                const data = await resp.json();
-                if (data.success) {
-                    const scoreColor = data.score >= 85 ? '#16a34a' : data.score >= 70 ? '#d97706' : '#dc2626';
-                    status.innerHTML = '<div style="padding:8px 0;">' +
-                        '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:8px;">✅ Scan Complete!</div>' +
-                        '<div style="display:flex;align-items:center;justify-content:center;gap:16px;">' +
-                        '<span style="font-size:28px;font-weight:800;color:' + scoreColor + ';">' + data.score + '</span>' +
-                        '<span style="color:#9ca3af;font-size:14px;">/ 100</span>' +
-                        '<a href="' + data.report_url + '" target="_blank" class="view-link" style="margin-left:8px;">View Report &rarr;</a>' +
-                        '</div></div>';
-                    setTimeout(() => location.reload(), 2500);
-                } else {
-                    status.innerHTML = '<div style="color:#dc2626;font-weight:600;">❌ Error: ' + (data.error || 'Unknown error') + '</div>';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\\n');
+                    buffer = lines.pop();  // Keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.step === 'complete' && data.result) {
+                                    const result = data.result;
+                                    const scoreColor = result.score >= 85 ? '#16a34a' : result.score >= 70 ? '#d97706' : '#dc2626';
+                                    status.innerHTML = '<div style="padding:8px 0;">' +
+                                        '<div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:8px;">✅ Scan Complete!</div>' +
+                                        '<div style="display:flex;align-items:center;justify-content:center;gap:16px;">' +
+                                        '<span style="font-size:28px;font-weight:800;color:' + scoreColor + ';">' + result.score + '</span>' +
+                                        '<span style="color:#9ca3af;font-size:14px;">/ 100</span>' +
+                                        '<a href="' + result.report_url + '" target="_blank" class="view-link" style="margin-left:8px;">View Report &rarr;</a>' +
+                                        '</div></div>';
+                                    setTimeout(() => location.reload(), 2500);
+                                } else if (data.step === 'error') {
+                                    status.innerHTML = '<div style="color:#dc2626;font-weight:600;">❌ Error: ' + data.detail + '</div>';
+                                } else if (data.step && data.detail) {
+                                    showProgress(data.step, data.detail);
+                                }
+                            } catch (e) {
+                                // Ignore parse errors for heartbeats
+                            }
+                        }
+                    }
                 }
             } catch(err) {
-                clearInterval(stepInterval);
                 status.innerHTML = '<div style="color:#dc2626;font-weight:600;">❌ Error: ' + err.message + '</div>';
             }
             btn.disabled = false;
@@ -1409,6 +1479,134 @@ def history_page():
 # ---------------------------------------------------------------------------
 # Routes - API (called by web UI and Wrike webhook)
 # ---------------------------------------------------------------------------
+
+@app.route("/api/scan-stream", methods=["POST"])
+def api_scan_stream():
+    """Run a QA scan with Server-Sent Events for real-time progress."""
+    data = request.get_json() or {}
+    site_url = data.get("site_url", "").strip()
+    partner = data.get("partner", "independent").strip().lower()
+    phase = data.get("phase", "full").strip().lower()
+
+    if not site_url:
+        return jsonify({"success": False, "error": "site_url is required"}), 400
+
+    if not site_url.startswith("http"):
+        site_url = "https://" + site_url
+
+    def generate():
+        import queue
+        progress_queue = queue.Queue()
+
+        def progress_callback(step, detail):
+            progress_queue.put({"step": step, "detail": detail})
+
+        # Send initial event
+        yield f"data: {json.dumps({'step': 'starting', 'detail': 'Initializing scan...'})}\n\n"
+
+        # Run scan in current thread, yielding progress
+        try:
+            # We need to run the scan and check for progress periodically
+            # Since run_scan is blocking, we use a thread
+            import threading
+            result_holder = {"report": None, "error": None}
+
+            def run_scan_thread():
+                try:
+                    result_holder["report"] = run_scan(site_url, partner, phase, progress_callback=progress_callback)
+                except Exception as e:
+                    result_holder["error"] = str(e)
+                finally:
+                    progress_queue.put(None)  # Signal completion
+
+            thread = threading.Thread(target=run_scan_thread)
+            thread.start()
+
+            # Yield progress events as they come
+            while True:
+                try:
+                    item = progress_queue.get(timeout=0.5)
+                    if item is None:
+                        break
+                    yield f"data: {json.dumps(item)}\n\n"
+                except queue.Empty:
+                    # Send heartbeat to keep connection alive
+                    yield f": heartbeat\n\n"
+
+            thread.join()
+
+            if result_holder["error"]:
+                yield f"data: {json.dumps({'step': 'error', 'detail': result_holder['error']})}\n\n"
+                return
+
+            report = result_holder["report"]
+            report.scan_id = _get_scan_id(site_url, phase)
+
+            # Save report
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = site_url.replace("https://", "").replace("http://", "").replace("/", "_").replace(".", "-")
+            report_filename = f"{safe_name}_{timestamp}.html"
+
+            report.report_filename = report_filename
+            html_report = generate_html_report(report)
+            json_filename = f"{safe_name}_{timestamp}.json"
+            json_report_data = generate_json_report(report)
+
+            # Save to database
+            scan_meta = {
+                "scan_id": report.scan_id,
+                "site_url": site_url,
+                "partner": partner,
+                "phase": phase,
+                "score": report.score,
+                "scan_time": report.scan_time,
+                "pages_scanned": report.pages_scanned,
+                "total_checks": report.total_checks,
+                "passed": report.passed,
+                "failed": report.failed,
+                "warnings": report.warnings,
+                "human_review": report.human_review,
+                "report_filename": report_filename,
+            }
+            try:
+                db_save_scan(scan_meta, html_report, json_report_data)
+            except Exception as e:
+                print(f"[DB] Error saving scan: {e}")
+
+            # Save to filesystem
+            try:
+                report_path = os.path.join(REPORTS_DIR, report_filename)
+                with open(report_path, "w", encoding="utf-8") as f:
+                    f.write(html_report)
+                json_path = os.path.join(REPORTS_DIR, json_filename)
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(json_report_data, f, indent=2, default=str)
+            except OSError as e:
+                print(f"[FS] Could not write report files: {e}")
+
+            # Add to in-memory history
+            scan_history.append({
+                "scan_id": report.scan_id,
+                "site_url": site_url,
+                "partner": partner,
+                "phase": phase,
+                "score": report.score,
+                "scan_time": report.scan_time,
+                "report_file": report_filename,
+                "_json_file": json_filename,
+            })
+
+            # Send final result
+            yield f"data: {json.dumps({'step': 'complete', 'detail': 'Scan complete!', 'result': {'success': True, 'score': report.score, 'passed': report.passed, 'failed': report.failed, 'warnings': report.warnings, 'human_review': report.human_review, 'report_url': f'/reports/{report_filename}', 'report_file': report_filename}})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'step': 'error', 'detail': str(e)})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',  # Disable nginx buffering
+    })
+
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
