@@ -2041,46 +2041,66 @@ def _languagetool_request_with_retry(text: str, max_retries: int = 3) -> dict | 
 def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
     """Check visible page text for grammar and spelling errors using LanguageTool API.
 
-    Checks up to 8 pages with exponential backoff retry for rate limiting.
+    Checks up to 10 pages IN PARALLEL for speed (~30-60s total instead of 5+ min).
     Returns separate results for spelling (FAIL) and grammar (WARN).
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     spelling_issues = []
     grammar_issues = []
     pages_checked = 0
     pages_failed = 0
 
-    # Limit to 8 pages to keep scan time reasonable (~4 min max for grammar)
-    max_grammar_pages = 8
-    pages_to_check = list(pages.items())[:max_grammar_pages]
+    # Prepare pages to check (extract text first, then API calls in parallel)
+    max_grammar_pages = 10
+    pages_with_text = []
 
-    for url, page in pages_to_check:
+    for url, page in list(pages.items())[:max_grammar_pages * 2]:  # Check more, take first 10 with text
         if not page.soup:
             continue
-
         soup_copy = BeautifulSoup(page.html, "lxml") if page.html else None
         if not soup_copy:
             continue
-
         text = _extract_visible_text(soup_copy)
         if not text or len(text) < 50:
             continue
+        pages_with_text.append((url, text[:10000]))
+        if len(pages_with_text) >= max_grammar_pages:
+            break
 
-        text = text[:10000]
+    if not pages_with_text:
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="PASS", weight=rule["weight"],
+            details="No pages with sufficient text content to check.",
+        )]
 
-        # Use retry wrapper with exponential backoff
+    # Check all pages in parallel (much faster than sequential)
+    def check_page(url_text_pair):
+        url, text = url_text_pair
         data = _languagetool_request_with_retry(text)
+        return url, data
 
+    results_map = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(check_page, p): p[0] for p in pages_with_text}
+        for future in as_completed(futures):
+            url, data = future.result()
+            results_map[url] = data
+
+    noisy_rules = {"WHITESPACE_RULE", "COMMA_PARENTHESIS_WHITESPACE",
+                   "UPPERCASE_SENTENCE_START", "CONSECUTIVE_SPACES",
+                   "EN_QUOTES", "DASH_RULE", "MULTIPLICATION_SIGN",
+                   "ELLIPSIS", "TYPOGRAPHICAL_APOSTROPHE"}
+
+    # Process results
+    for url, data in results_map.items():
         if data is None:
             pages_failed += 1
             continue
 
         matches = data.get("matches", [])
         pages_checked += 1
-
-        noisy_rules = {"WHITESPACE_RULE", "COMMA_PARENTHESIS_WHITESPACE",
-                       "UPPERCASE_SENTENCE_START", "CONSECUTIVE_SPACES",
-                       "EN_QUOTES", "DASH_RULE", "MULTIPLICATION_SIGN",
-                       "ELLIPSIS", "TYPOGRAPHICAL_APOSTROPHE"}
 
         for m in matches:
             issue_type = m.get("rule", {}).get("issueType", "")
@@ -2092,13 +2112,11 @@ def check_grammar_spelling(pages: dict, rule: dict) -> list[CheckResult]:
             context_text = context_obj.get("text", "")
             offset = context_obj.get("offset", 0)
             length = context_obj.get("length", 0)
-            # Extract the flagged word
             flagged_word = context_text[offset:offset + length] if length else ""
 
             is_spelling = ("spell" in issue_type.lower() or
                            "misspelling" in issue_type.lower())
 
-            # Skip proper nouns, brand names, and medical/vet terms
             if is_spelling and _should_skip_spelling(flagged_word):
                 continue
 
