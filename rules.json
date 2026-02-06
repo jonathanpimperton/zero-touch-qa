@@ -717,33 +717,33 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-002",
+      "id": "AI-001",
       "category": "content",
       "phase": [
         "full",
         "final"
       ],
-      "check": "AI check: Image appropriateness on sensitive pages (euthanasia, end-of-life)",
+      "check": "Image appropriateness on sensitive pages (euthanasia, end-of-life)",
       "automated": true,
       "weight": 2,
       "partners": "all",
       "check_fn": "check_image_appropriateness"
     },
     {
-      "id": "HUMAN-003",
+      "id": "AI-002",
       "category": "craftsmanship",
       "phase": [
         "full",
         "final"
       ],
-      "check": "AI check: Visual consistency (alignment, spacing, colors)",
+      "check": "Visual consistency (alignment, spacing, colors)",
       "automated": true,
       "weight": 2,
       "partners": "all",
       "check_fn": "check_visual_consistency"
     },
     {
-      "id": "HUMAN-004",
+      "id": "HUMAN-002",
       "category": "human_review",
       "phase": [
         "full",
@@ -756,7 +756,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-005",
+      "id": "AI-003",
       "category": "craftsmanship",
       "phase": [
         "prototype",
@@ -770,7 +770,7 @@
       "check_fn": "check_branding_consistency"
     },
     {
-      "id": "HUMAN-007",
+      "id": "HUMAN-003",
       "category": "human_review",
       "phase": [
         "full",
@@ -783,7 +783,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-008",
+      "id": "HUMAN-004",
       "category": "human_review",
       "phase": [
         "full",
@@ -796,7 +796,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-009",
+      "id": "HUMAN-005",
       "category": "human_review",
       "phase": [
         "full",
@@ -809,7 +809,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-011",
+      "id": "HUMAN-006",
       "category": "human_review",
       "phase": [
         "full",
@@ -822,7 +822,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-012",
+      "id": "HUMAN-007",
       "category": "human_review",
       "phase": [
         "full",
@@ -835,7 +835,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-013",
+      "id": "HUMAN-008",
       "category": "human_review",
       "phase": [
         "full",
@@ -848,7 +848,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-014",
+      "id": "HUMAN-009",
       "category": "human_review",
       "phase": [
         "full",
@@ -861,7 +861,7 @@
       "check_fn": null
     },
     {
-      "id": "HUMAN-015",
+      "id": "AI-004",
       "category": "human_review",
       "phase": [
         "full",
@@ -874,7 +874,7 @@
       "check_fn": "check_image_cropping"
     },
     {
-      "id": "HUMAN-016",
+      "id": "AI-005",
       "category": "functionality",
       "phase": [
         "full",
@@ -887,7 +887,7 @@
       "check_fn": "check_responsive_viewports"
     },
     {
-      "id": "HUMAN-018",
+      "id": "AI-006",
       "category": "functionality",
       "phase": [
         "full",

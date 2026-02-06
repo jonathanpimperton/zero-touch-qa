@@ -538,24 +538,24 @@ def main():
     </div>
     ''')
 
-    # SLIDE 16: What's Next
+    # SLIDE 16: Limitations & Future Enhancements
     slides.append(f'''
     <div class="slide">
-        <h2>What's Next</h2>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
+        <h2>Limitations & Future Enhancements</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div>
-                <div style="background: #22c55e; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 600; font-size: 13px;">Fully Automated</div>
-                <div class="card" style="margin-bottom: 8px; font-size: 12px; padding: 10px; border-left: 3px solid #22c55e;">
-                    <h3 style="font-size: 12px; color: #22c55e;">Form Submission Testing</h3>
-                    <p style="line-height: 1.4; font-size: 11px;">Scanner fills and submits contact forms using Playwright, verifies redirect to thank-you page</p>
+                <div style="background: #f59e0b; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: 600; font-size: 13px;">Current Limitations</div>
+                <div class="card" style="margin-bottom: 10px; font-size: 12px;">
+                    <h3 style="font-size: 13px;">Page Layout & Spacing</h3>
+                    <p style="line-height: 1.5;">Element alignment, margins, and section spacing require human judgment. Image cropping is handled by AI.</p>
                 </div>
-                <div class="card" style="margin-bottom: 8px; font-size: 12px; padding: 10px; border-left: 3px solid #22c55e;">
-                    <h3 style="font-size: 12px; color: #22c55e;">Image Analysis (AI)</h3>
-                    <p style="line-height: 1.4; font-size: 11px;">Gemini Vision checks image cropping, detects medical equipment in photos, validates euthanasia page imagery</p>
+                <div class="card" style="margin-bottom: 10px; font-size: 12px;">
+                    <h3 style="font-size: 13px;">Brand Tone & Voice</h3>
+                    <p style="line-height: 1.5;">Content nuance and client-specific brand voice require human review.</p>
                 </div>
-                <div class="card" style="font-size: 12px; padding: 10px; border-left: 3px solid #f59e0b;">
-                    <h3 style="font-size: 12px; color: #d97706;">Remaining Human Review</h3>
-                    <p style="line-height: 1.4; font-size: 11px;">Page layout, element spacing, and brand tone still require human judgment &mdash; flagged in checklist</p>
+                <div class="card" style="font-size: 12px;">
+                    <h3 style="font-size: 13px;">Email Delivery Verification</h3>
+                    <p style="line-height: 1.5;">Form submissions are tested, but verifying emails actually reach the inbox requires mailbox integration.</p>
                 </div>
             </div>
             <div>
@@ -573,8 +573,8 @@ def main():
                     <p style="line-height: 1.4; font-size: 11px;">Trending reports from scan history &mdash; pass rates, failure patterns, partner comparisons</p>
                 </div>
                 <div class="card" style="font-size: 12px; padding: 10px;">
-                    <h3 style="font-size: 12px;">Email Delivery Verification</h3>
-                    <p style="line-height: 1.4; font-size: 11px;">Verify form submissions actually reach clinic inbox (requires mailbox integration)</p>
+                    <h3 style="font-size: 12px;">More Partner Templates</h3>
+                    <p style="line-height: 1.4; font-size: 11px;">Expand partner-specific rules as QA team identifies unique requirements</p>
                 </div>
             </div>
         </div>
