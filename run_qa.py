@@ -19,6 +19,9 @@ load_dotenv()
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules
 from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS
 from qa_report import generate_html_report, generate_json_report
+from wp_api import PetDeskQAPluginClient, WP_CHECK_FUNCTIONS
+
+PETDESK_QA_API_KEY = os.environ.get("PETDESK_QA_API_KEY", "petdesk-qa-2026-hackathon-key")
 
 _REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 _SCAN_COUNTER_FILE = os.path.join(_REPORTS_DIR, "scan_counter.json")
@@ -70,6 +73,15 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 50) -> Sc
     print(f"       Crawled {len(pages)} pages")
     print()
 
+    # Initialize WordPress API client for backend checks
+    wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
+    if wp_client.is_available():
+        print(f"       WordPress plugin detected - backend checks enabled")
+    else:
+        print(f"       WordPress plugin not found - backend checks will be flagged for human review")
+        wp_client = None
+    print()
+
     print(f"[3/3] Running {len(auto_rules)} automated checks...")
     all_results = []
 
@@ -78,7 +90,11 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 50) -> Sc
         if fn_name and fn_name in CHECK_FUNCTIONS:
             fn = CHECK_FUNCTIONS[fn_name]
             try:
-                results = fn(pages, rule)
+                # WordPress checks need the wp_client parameter
+                if fn_name in WP_CHECK_FUNCTIONS:
+                    results = fn(pages, rule, wp_client=wp_client)
+                else:
+                    results = fn(pages, rule)
                 all_results.extend(results)
                 for r in results:
                     icon = {"PASS": "+", "FAIL": "X", "WARN": "!", "SKIP": "-", "HUMAN_REVIEW": "?"}
