@@ -194,24 +194,13 @@ class SiteCrawler:
         return False
 
     def _ensure_browser(self):
-        """Lazy-init Chromium browser. Returns browser or None on failure."""
+        """Get the shared Chromium browser. Returns browser or None on failure."""
         if self._browser is not None:
             return self._browser
         try:
-            self._playwright_instance = sync_playwright().start()
-            launch_args = [
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-setuid-sandbox",
-            ]
-            # --single-process helps in Docker containers but can crash on Windows
-            if os.environ.get("DOCKER_CONTAINER"):
-                launch_args.append("--single-process")
-            self._browser = self._playwright_instance.chromium.launch(
-                headless=True,
-                args=launch_args,
-            )
+            self._browser = _get_shared_browser()
+            if not self._browser:
+                self.playwright_available = False
             return self._browser
         except Exception as e:
             print(f"  [JS] Could not launch browser: {e}")
@@ -219,19 +208,8 @@ class SiteCrawler:
             return None
 
     def _cleanup_browser(self):
-        """Close browser and Playwright instance."""
-        if self._browser:
-            try:
-                self._browser.close()
-            except Exception:
-                pass
-            self._browser = None
-        if self._playwright_instance:
-            try:
-                self._playwright_instance.stop()
-            except Exception:
-                pass
-            self._playwright_instance = None
+        """Release crawler's reference to the shared browser (does not close it)."""
+        self._browser = None
 
     def _fetch_with_playwright(self, url: str) -> Optional[PageData]:
         """Re-fetch a page with Playwright to get JS-rendered content."""
