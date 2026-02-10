@@ -30,6 +30,54 @@ except ImportError:
 REQUEST_TIMEOUT = 15
 MAX_PAGES_TO_CRAWL = 50
 
+# ---------------------------------------------------------------------------
+# Shared Playwright browser (one Chromium instance for all checks in a scan)
+# ---------------------------------------------------------------------------
+_shared_pw_instance = None
+_shared_pw_browser = None
+
+
+def _get_shared_browser():
+    """Get or create a shared Chromium browser for Playwright checks."""
+    global _shared_pw_instance, _shared_pw_browser
+    if _shared_pw_browser is not None:
+        return _shared_pw_browser
+    if not PLAYWRIGHT_AVAILABLE:
+        return None
+    _shared_pw_instance = sync_playwright().start()
+    _shared_pw_browser = _shared_pw_instance.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--disable-setuid-sandbox",
+        ],
+    )
+    return _shared_pw_browser
+
+
+def cleanup_shared_browser():
+    """Close the shared browser. Call after all Playwright checks complete."""
+    global _shared_pw_instance, _shared_pw_browser
+    if _shared_pw_browser:
+        try:
+            _shared_pw_browser.close()
+        except Exception:
+            pass
+        _shared_pw_browser = None
+    if _shared_pw_instance:
+        try:
+            _shared_pw_instance.stop()
+        except Exception:
+            pass
+        _shared_pw_instance = None
+
+
+def clear_psi_cache():
+    """Clear the PSI results cache between scans."""
+    _psi_cache.clear()
+
 # PageSpeed Insights API (free with a Google Cloud API key)
 PSI_API_KEY = os.environ.get("PSI_API_KEY", "")
 PLAYWRIGHT_ALWAYS = os.environ.get("PLAYWRIGHT_ALWAYS", "").strip() == "1"
@@ -1435,16 +1483,13 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
     forms_failed = []
 
     try:
-        playwright_instance = sync_playwright().start()
-        browser = playwright_instance.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-setuid-sandbox",
-            ],
-        )
+        browser = _get_shared_browser()
+        if not browser:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details="Could not launch browser for form testing.",
+            )]
 
         forms_skipped_captcha = []
         forms_skipped_complex = []
@@ -1583,9 +1628,6 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             except Exception as e:
                 short_url = url.split("//")[-1] if "//" in url else url
                 forms_failed.append(f"{short_url} - Error: {str(e)[:50]}")
-
-        browser.close()
-        playwright_instance.stop()
 
     except Exception as e:
         return [CheckResult(
@@ -3249,54 +3291,49 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
     issues = []
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-setuid-sandbox",
-                ],
-            )
+        browser = _get_shared_browser()
+        if not browser:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details="Could not launch browser for responsive testing. Manual verification recommended.",
+            )]
 
-            for vp in viewports:
-                try:
-                    context = browser.new_context(
-                        viewport={"width": vp["width"], "height": vp["height"]},
-                        user_agent=USER_AGENT
-                    )
-                    page = context.new_page()
-                    page.goto(homepage_url, timeout=30000)
-                    page.wait_for_load_state("networkidle", timeout=15000)
+        for vp in viewports:
+            try:
+                context = browser.new_context(
+                    viewport={"width": vp["width"], "height": vp["height"]},
+                    user_agent=USER_AGENT
+                )
+                page = context.new_page()
+                page.goto(homepage_url, timeout=30000)
+                page.wait_for_load_state("networkidle", timeout=15000)
 
-                    # Check for horizontal overflow (common responsive issue)
-                    has_overflow = page.evaluate("""
-                        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-                    """)
+                # Check for horizontal overflow (common responsive issue)
+                has_overflow = page.evaluate("""
+                    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+                """)
 
-                    if has_overflow:
-                        issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
+                if has_overflow:
+                    issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
 
-                    # Check if main content is visible
-                    main_visible = page.evaluate("""
-                        () => {
-                            const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
-                            if (!main) return true;  // No main element to check
-                            const rect = main.getBoundingClientRect();
-                            return rect.width > 0 && rect.height > 0;
-                        }
-                    """)
+                # Check if main content is visible
+                main_visible = page.evaluate("""
+                    () => {
+                        const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
+                        if (!main) return true;  // No main element to check
+                        const rect = main.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    }
+                """)
 
-                    if not main_visible:
-                        issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
+                if not main_visible:
+                    issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
 
-                    context.close()
+                context.close()
 
-                except Exception as e:
-                    issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
-
-            browser.close()
+            except Exception as e:
+                issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
 
     except Exception as e:
         return [CheckResult(
@@ -3370,36 +3407,29 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
     if not map_coords and PLAYWRIGHT_AVAILABLE:
         contact_pages = [url for url in pages.keys() if any(x in url.lower() for x in ['contact', 'location', 'about', 'find-us'])]
         if contact_pages:
-            try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(
-                        headless=True,
-                        args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-setuid-sandbox"],
-                    )
-                    for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
-                        try:
-                            pw_page = browser.new_page()
-                            pw_page.goto(contact_url, timeout=15000)
-                            pw_page.wait_for_load_state("networkidle", timeout=10000)
-                            html = pw_page.content()
-                            pw_page.close()
+            browser = _get_shared_browser()
+            if browser:
+                for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
+                    try:
+                        pw_page = browser.new_page()
+                        pw_page.goto(contact_url, timeout=15000)
+                        pw_page.wait_for_load_state("networkidle", timeout=10000)
+                        html = pw_page.content()
+                        pw_page.close()
 
-                            # Look for Google Maps embed URL in rendered HTML
-                            map_url_matches = re.findall(r'google\.com/maps/embed\?pb=[^"\'>\s]+', html)
-                            for src in map_url_matches:
-                                coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
-                                if coord_match:
-                                    # !2d is longitude, !3d is latitude
-                                    map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
-                                    map_page_url = contact_url
-                                    break
-                            if map_coords:
+                        # Look for Google Maps embed URL in rendered HTML
+                        map_url_matches = re.findall(r'google\.com/maps/embed\?pb=[^"\'>\s]+', html)
+                        for src in map_url_matches:
+                            coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
+                            if coord_match:
+                                # !2d is longitude, !3d is latitude
+                                map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
+                                map_page_url = contact_url
                                 break
-                        except Exception:
-                            continue
-                    browser.close()
-            except Exception:
-                pass
+                        if map_coords:
+                            break
+                    except Exception:
+                        continue
 
     if not map_coords:
         # No map on the site - nothing to check
@@ -3651,27 +3681,24 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
 
     try:
         # Take screenshot
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-setuid-sandbox",
-                ],
-            )
-            context = browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent=USER_AGENT
-            )
-            page = context.new_page()
-            page.goto(homepage_url, timeout=30000)
-            page.wait_for_load_state("networkidle", timeout=15000)
+        browser = _get_shared_browser()
+        if not browser:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                details="Could not launch browser for screenshots. Manual review needed.",
+            )]
+        context = browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent=USER_AGENT
+        )
+        page = context.new_page()
+        page.goto(homepage_url, timeout=30000)
+        page.wait_for_load_state("networkidle", timeout=15000)
 
-            # Take full page screenshot
-            screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
-            browser.close()
+        # Take full page screenshot
+        screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
+        context.close()
 
         prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
 

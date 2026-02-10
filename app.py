@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
 
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
-from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS
+from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
 from wp_api import PetDeskQAPluginClient, WordPressAPIClient, WP_CHECK_FUNCTIONS
 from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
@@ -58,6 +58,9 @@ PETDESK_QA_API_KEY = os.environ.get("PETDESK_QA_API_KEY", "petdesk-qa-2026-hacka
 
 # Store scan history in memory (backed by PostgreSQL when DATABASE_URL is set)
 scan_history = []
+
+# Limit concurrent scans to 1 to stay within Render.com 512MB memory limit
+_scan_semaphore = threading.Semaphore(1)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -205,6 +208,10 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     progress("report", "Generating report...")
     total_points_lost = sum(r.points_lost for r in all_results)
     score = max(0, 100 - total_points_lost)
+
+    # Clean up shared Playwright browser and PSI cache to free memory
+    cleanup_shared_browser()
+    clear_psi_cache()
 
     report = ScanReport(
         site_url=site_url, partner=partner, phase=phase,
@@ -1490,6 +1497,11 @@ def api_scan_stream():
         def progress_callback(step, detail):
             progress_queue.put({"step": step, "detail": detail})
 
+        # Limit to one concurrent scan to stay within 512MB memory limit
+        if not _scan_semaphore.acquire(blocking=False):
+            yield f"data: {json.dumps({'step': 'error', 'detail': 'A scan is already running. Please wait for it to finish and try again.'})}\n\n"
+            return
+
         # Send initial event
         yield f"data: {json.dumps({'step': 'starting', 'detail': 'Initializing scan...'})}\n\n"
 
@@ -1585,12 +1597,16 @@ def api_scan_stream():
                 "report_file": report_filename,
                 "_json_file": json_filename,
             })
+            if len(scan_history) > 200:
+                scan_history[:] = scan_history[-200:]
 
             # Send final result
             yield f"data: {json.dumps({'step': 'complete', 'detail': 'Scan complete!', 'result': {'success': True, 'score': report.score, 'passed': report.passed, 'failed': report.failed, 'warnings': report.warnings, 'human_review': report.human_review, 'report_url': f'/reports/{report_filename}', 'report_file': report_filename}})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'step': 'error', 'detail': str(e)})}\n\n"
+        finally:
+            _scan_semaphore.release()
 
     return Response(generate(), mimetype='text/event-stream', headers={
         'Cache-Control': 'no-cache',
@@ -1671,6 +1687,8 @@ def api_scan():
             "report_file": report_filename,
             "_json_file": json_filename,
         })
+        if len(scan_history) > 200:
+            scan_history[:] = scan_history[-200:]
 
         # Post to Wrike if task ID provided
         if wrike_task_id and WRIKE_API_TOKEN:
@@ -1903,6 +1921,8 @@ def _process_wrike_task(task_id: str):
             "score": report.score, "scan_time": report.scan_time,
             "report_file": report_filename,
         })
+        if len(scan_history) > 200:
+            scan_history[:] = scan_history[-200:]
 
         print(f"[Wrike] Scan complete for task {task_id}: score {report.score}/100")
 
