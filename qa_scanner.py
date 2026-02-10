@@ -45,14 +45,25 @@ def _get_shared_browser():
     if not PLAYWRIGHT_AVAILABLE:
         return None
     _shared_pw_instance = sync_playwright().start()
+    launch_args = [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-setuid-sandbox",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-default-apps",
+        "--disable-sync",
+        "--disable-translate",
+        "--no-first-run",
+        "--js-flags=--max-old-space-size=128",
+    ]
+    # --single-process collapses Chromium sub-processes, saves ~100MB in Docker
+    if os.environ.get("DOCKER_CONTAINER"):
+        launch_args.append("--single-process")
     _shared_pw_browser = _shared_pw_instance.chromium.launch(
         headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-setuid-sandbox",
-        ],
+        args=launch_args,
     )
     return _shared_pw_browser
 
@@ -125,7 +136,7 @@ class CheckResult:
     weight: int
     details: str = ""
     page_url: str = ""
-    points_lost: int = 0
+    points_lost: float = 0.0
 
 
 @dataclass

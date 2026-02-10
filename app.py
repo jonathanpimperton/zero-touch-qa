@@ -186,7 +186,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
 
     # 1. Run fast checks in parallel (no Playwright)
     progress("checks", f"Running {len(parallel_rules)} fast checks in parallel...")
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(run_check, rule): rule for rule in parallel_rules}
         for future in as_completed(futures):
             all_results.extend(future.result())
@@ -206,8 +206,16 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         ))
 
     progress("report", "Generating report...")
+
+    # Apply partial penalties: warnings lose 50% of weight, pending human reviews lose 30%
+    for r in all_results:
+        if r.status == "WARN":
+            r.points_lost = r.weight * 0.5
+        elif r.status == "HUMAN_REVIEW":
+            r.points_lost = r.weight * 0.3
+
     total_points_lost = sum(r.points_lost for r in all_results)
-    score = max(0, 100 - total_points_lost)
+    score = round(max(0, 100 - total_points_lost))
 
     # Clean up shared Playwright browser and PSI cache to free memory
     cleanup_shared_browser()

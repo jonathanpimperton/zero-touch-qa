@@ -1025,28 +1025,36 @@ function setReview(idx, status) {{
 }}
 
 function recalcScore() {{
-    var lost = 0;
+    // baseScore already includes 30% pending penalty for all human items.
+    // PASS/N/A: restore the 30% penalty (score goes up)
+    // FAIL: increase penalty from 30% to 100% (score goes down)
+    // null (pending): no change from baseScore
+    var adjustment = 0;
+    var completedItems = 0;
+    var hasHumanFails = false;
+    var totalHumanItems = Object.keys(humanStatuses).length;
+
     for (var idx in humanStatuses) {{
-        if (humanStatuses[idx] === 'fail') {{
-            var card = document.getElementById('review-' + idx);
-            var weight = parseInt(card.getAttribute('data-weight') || '1');
-            lost += weight;
+        var card = document.getElementById('review-' + idx);
+        var weight = parseInt(card.getAttribute('data-weight') || '1');
+        if (humanStatuses[idx] === 'pass' || humanStatuses[idx] === 'na') {{
+            adjustment += weight * 0.3;  // restore pending penalty
+            completedItems++;
+        }} else if (humanStatuses[idx] === 'fail') {{
+            adjustment -= weight * 0.7;  // increase from 30% to full weight
+            completedItems++;
+            hasHumanFails = true;
         }}
+        // null = pending, no adjustment needed
     }}
-    var newScore = Math.max(0, baseScore - lost);
+
+    var newScore = Math.max(0, Math.round(baseScore + adjustment));
     // Update score number
     document.getElementById('score-value').textContent = newScore;
     // Update ring
     var offset = circumference * (1 - newScore / 100);
     document.getElementById('score-ring').setAttribute('stroke-dashoffset', offset);
-    // Check if all human reviews are complete
-    var totalHumanItems = Object.keys(humanStatuses).length;
-    var completedItems = 0;
-    var hasHumanFails = false;
-    for (var idx in humanStatuses) {{
-        if (humanStatuses[idx] !== null) completedItems++;
-        if (humanStatuses[idx] === 'fail') hasHumanFails = true;
-    }}
+
     var allHumanComplete = (completedItems === totalHumanItems);
 
     // Update progress bar in banner
@@ -1071,7 +1079,6 @@ function recalcScore() {{
 
     // Determine assessment based on score AND human review completion
     if (hasHumanFails || newScore < 95) {{
-        // Has issues from human review or low score
         if (newScore >= 85) {{
             assess.textContent = 'Minor Issues - Fix Before Delivery';
             assess.style.background = '#ecfccb'; assess.style.color = '#65a30d';
@@ -1086,19 +1093,13 @@ function recalcScore() {{
             ring.setAttribute('stroke', '#ef4444'); scoreText.setAttribute('fill', '#dc2626');
         }}
     }} else if (!allHumanComplete) {{
-        // Score OK but human review not complete
         assess.textContent = 'Complete Human Review (' + completedItems + '/' + totalHumanItems + ')';
         assess.style.background = '#FAF5FF'; assess.style.color = '#5820BA';
         ring.setAttribute('stroke', '#5820BA'); scoreText.setAttribute('fill', '#5820BA');
     }} else {{
-        // All good - ready for delivery
         assess.textContent = 'Ready for Delivery';
         assess.style.background = '#dcfce7'; assess.style.color = '#16a34a';
         ring.setAttribute('stroke', '#22c55e'); scoreText.setAttribute('fill', '#16a34a');
-    }}
-    // Show score change indicator
-    if (lost > 0) {{
-        assess.textContent += ' (-' + lost + ' pts from human review)';
     }}
 }}
 
