@@ -62,6 +62,16 @@ scan_history = []
 # Limit concurrent scans to 1 to stay within Render.com 512MB memory limit
 _scan_semaphore = threading.Semaphore(1)
 
+
+def _add_to_scan_history(entry: dict):
+    """Add a scan to in-memory history, replacing any existing entry with the same scan_id."""
+    scan_id = entry.get("scan_id")
+    if scan_id:
+        scan_history[:] = [s for s in scan_history if s.get("scan_id") != scan_id]
+    scan_history.append(entry)
+    if len(scan_history) > 200:
+        scan_history[:] = scan_history[-200:]
+
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
@@ -1594,8 +1604,8 @@ def api_scan_stream():
             except OSError as e:
                 print(f"[FS] Could not write report files: {e}")
 
-            # Add to in-memory history
-            scan_history.append({
+            # Add to in-memory history (replaces previous scan with same ID)
+            _add_to_scan_history({
                 "scan_id": report.scan_id,
                 "site_url": site_url,
                 "partner": partner,
@@ -1605,8 +1615,6 @@ def api_scan_stream():
                 "report_file": report_filename,
                 "_json_file": json_filename,
             })
-            if len(scan_history) > 200:
-                scan_history[:] = scan_history[-200:]
 
             # Send final result
             yield f"data: {json.dumps({'step': 'complete', 'detail': 'Scan complete!', 'result': {'success': True, 'score': report.score, 'passed': report.passed, 'failed': report.failed, 'warnings': report.warnings, 'human_review': report.human_review, 'report_url': f'/reports/{report_filename}', 'report_file': report_filename}})}\n\n"
@@ -1684,8 +1692,8 @@ def api_scan():
         except OSError as e:
             print(f"[FS] Could not write report files: {e}")
 
-        # Add to in-memory history
-        scan_history.append({
+        # Add to in-memory history (replaces previous scan with same ID)
+        _add_to_scan_history({
             "scan_id": report.scan_id,
             "site_url": site_url,
             "partner": partner,
@@ -1695,8 +1703,6 @@ def api_scan():
             "report_file": report_filename,
             "_json_file": json_filename,
         })
-        if len(scan_history) > 200:
-            scan_history[:] = scan_history[-200:]
 
         # Post to Wrike if task ID provided
         if wrike_task_id and WRIKE_API_TOKEN:
@@ -1923,14 +1929,12 @@ def _process_wrike_task(task_id: str):
         comment = generate_wrike_comment(report)
         wrike_post_comment(task_id, comment)
 
-        scan_history.append({
+        _add_to_scan_history({
             "scan_id": report.scan_id,
             "site_url": site_url, "partner": partner, "phase": phase,
             "score": report.score, "scan_time": report.scan_time,
             "report_file": report_filename,
         })
-        if len(scan_history) > 200:
-            scan_history[:] = scan_history[-200:]
 
         print(f"[Wrike] Scan complete for task {task_id}: score {report.score}/100")
 

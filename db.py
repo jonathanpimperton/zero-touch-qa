@@ -167,6 +167,8 @@ def db_save_scan(scan_meta: dict, html_report: str, json_report: dict):
 
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Delete previous scan for this scan_id (same site+phase) so re-scans replace
+            cur.execute("DELETE FROM scans WHERE scan_id = %s", (scan_meta["scan_id"],))
             cur.execute("""
                 INSERT INTO scans
                     (scan_id, site_url, partner, phase, score, scan_time,
@@ -196,10 +198,11 @@ def db_load_scan_history() -> list | None:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT scan_id, site_url, partner, phase, score,
+                SELECT DISTINCT ON (scan_id)
+                       scan_id, site_url, partner, phase, score,
                        scan_time, report_filename
                 FROM scans
-                ORDER BY scan_time ASC
+                ORDER BY scan_id, created_at DESC
             """)
             rows = cur.fetchall()
 
