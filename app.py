@@ -1548,7 +1548,7 @@ def api_scan_stream():
                 finally:
                     progress_queue.put(None)  # Signal completion
 
-            thread = threading.Thread(target=run_scan_thread)
+            thread = threading.Thread(target=run_scan_thread, daemon=True)
             thread.start()
 
             # Yield progress events as they come
