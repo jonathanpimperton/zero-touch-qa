@@ -3824,26 +3824,86 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
 
-def _analyze_image_with_ai(image_bytes: bytes, prompt: str) -> str:
-    """Helper to analyze an image using Gemini (primary) or Anthropic (fallback)."""
+# Reusable AI clients (created once, not per-call)
+_gemini_client = None
+_anthropic_client = None
+_last_ai_call_time = 0  # For inter-call throttling
+_image_fetch_cache = {}  # URL -> image bytes (shared across AI checks within a scan)
+
+
+def _fetch_image_cached(src: str) -> bytes | None:
+    """Fetch an image URL with caching. Returns bytes or None on failure."""
+    if src in _image_fetch_cache:
+        return _image_fetch_cache[src]
+    try:
+        resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
+        if resp.status_code == 200 and "image" in resp.headers.get("content-type", ""):
+            _image_fetch_cache[src] = resp.content
+            return resp.content
+    except Exception:
+        pass
+    _image_fetch_cache[src] = None
+    return None
+
+
+def clear_ai_caches():
+    """Clear AI-related caches between scans."""
+    global _gemini_client, _anthropic_client, _image_fetch_cache
+    _image_fetch_cache = {}
+
+
+def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3) -> str:
+    """Helper to analyze an image using Gemini (primary) or Anthropic (fallback).
+    Includes retry with exponential backoff for rate limit (429) errors
+    and inter-call throttling to stay under RPM limits.
+    """
     import base64
-    from google.genai import types
+    import time as _time
+    global _gemini_client, _anthropic_client, _last_ai_call_time
+
+    # Throttle: wait at least 1s between API calls to stay under RPM limits
+    elapsed = _time.time() - _last_ai_call_time
+    if elapsed < 1.0:
+        _time.sleep(1.0 - elapsed)
 
     if AI_PROVIDER == "gemini":
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                prompt,
-            ]
-        )
-        return response.text.strip()
+        from google.genai import types
+
+        if _gemini_client is None:
+            _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+        for attempt in range(max_retries):
+            try:
+                _last_ai_call_time = _time.time()
+                response = _gemini_client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[
+                        types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                        prompt,
+                    ]
+                )
+                return response.text.strip()
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "resource_exhausted" in err_str or "rate" in err_str:
+                    delay = (2 ** attempt) * 2  # 2s, 4s, 8s
+                    print(f"  [AI] Rate limited (attempt {attempt+1}/{max_retries}), waiting {delay}s...")
+                    _time.sleep(delay)
+                    _last_ai_call_time = _time.time()
+                    if attempt == max_retries - 1:
+                        print(f"  [AI] Rate limit exceeded after {max_retries} retries: {str(e)[:80]}")
+                        return None
+                else:
+                    print(f"  [AI] Gemini error: {str(e)[:80]}")
+                    return None
 
     elif AI_PROVIDER == "anthropic":
+        if _anthropic_client is None:
+            _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
+        _last_ai_call_time = _time.time()
+        response = _anthropic_client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=300,
             messages=[{
@@ -3924,17 +3984,11 @@ Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
                 continue
 
             try:
-                # Fetch image
-                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
-                if img_resp.status_code != 200:
+                img_data = _fetch_image_cached(src)
+                if not img_data:
                     continue
 
-                content_type = img_resp.headers.get("content-type", "")
-                if "image" not in content_type:
-                    continue
-
-                # Use AI helper to analyze image
-                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt)
                 if result_text is None:
                     continue
 
@@ -3944,7 +3998,6 @@ Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
                     issues.append(f"{url}: {src[:50]}... - {result_text}")
 
             except Exception as e:
-                # Skip failed images silently
                 continue
 
     if issues:
@@ -4203,12 +4256,12 @@ If concerning medical equipment is prominently visible, respond: INAPPROPRIATE: 
 
 Be lenient - normal exam room backgrounds are fine. Only flag prominent/concerning items."""
 
-    for url, page in list(pages.items())[:5]:  # Limit pages
+    for url, page in list(pages.items())[:3]:  # Limit to 3 pages (was 5)
         if not page.soup:
             continue
 
         images = page.soup.find_all("img")
-        for img in images[:8]:  # Limit images per page
+        for img in images[:5]:  # Limit to 5 images per page (was 8)
             src = img.get("src", "")
             if not src or "icon" in src.lower() or "logo" in src.lower() or len(src) < 10:
                 continue
@@ -4221,11 +4274,11 @@ Be lenient - normal exam room backgrounds are fine. Only flag prominent/concerni
                 continue
 
             try:
-                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
-                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                img_data = _fetch_image_cached(src)
+                if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt)
                 if result_text is None:
                     continue
 
@@ -4323,11 +4376,11 @@ Respond: STOCK (appropriate) or REAL_PET: [brief reason why it appears to be a r
                 continue
 
             try:
-                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
-                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                img_data = _fetch_image_cached(src)
+                if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt)
                 if result_text is None:
                     continue
 
@@ -4391,13 +4444,13 @@ If there are obvious cropping problems, respond: CROPPING_ISSUE: [describe the p
 Be lenient - artistic crops and intentional close-ups are fine. Only flag obvious problems."""
 
     # Check hero images and featured images on key pages
-    for url, page in list(pages.items())[:5]:
+    for url, page in list(pages.items())[:3]:  # Limit to 3 pages (was 5)
         if not page.soup:
             continue
 
         # Focus on larger/featured images
         images = page.soup.find_all("img")
-        for img in images[:6]:
+        for img in images[:5]:  # Limit to 5 per page (was 6)
             src = img.get("src", "")
             # Skip tiny images, icons
             if not src or "icon" in src.lower() or "logo" in src.lower():
@@ -4410,11 +4463,11 @@ Be lenient - artistic crops and intentional close-ups are fine. Only flag obviou
                 continue
 
             try:
-                img_resp = requests.get(src, timeout=10, headers={"User-Agent": USER_AGENT})
-                if img_resp.status_code != 200 or "image" not in img_resp.headers.get("content-type", ""):
+                img_data = _fetch_image_cached(src)
+                if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_resp.content, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt)
                 if result_text is None:
                     continue
 

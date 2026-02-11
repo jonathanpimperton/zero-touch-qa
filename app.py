@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
 
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
-from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache, pre_extract_page_data, clear_pre_extracted_data
+from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache, pre_extract_page_data, clear_pre_extracted_data, clear_ai_caches
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
 from wp_api import PetDeskQAPluginClient, WordPressAPIClient, WP_CHECK_FUNCTIONS
 from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
@@ -275,10 +275,11 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     total_points_lost = sum(r.points_lost for r in all_results)
     score = round(max(0, 100 - total_points_lost))
 
-    # Clean up shared Playwright browser, pre-extracted data, and PSI cache
+    # Clean up shared Playwright browser, pre-extracted data, caches
     cleanup_shared_browser()
     clear_pre_extracted_data()
     clear_psi_cache()
+    clear_ai_caches()
     gc.collect()
     _mem_mb("After final cleanup")
 
