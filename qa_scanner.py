@@ -104,6 +104,7 @@ _BROWSER_INFRA_KEYWORDS = [
     "browser.new_context", "browsercontext.new_page",
     "browser has been closed", "connection closed",
     "target closed", "protocol error",
+    "page.goto: timeout", "timeout 30000ms", "timeout 60000ms",
 ]
 
 
@@ -1573,7 +1574,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                         break
                     context = browser.new_context(user_agent=USER_AGENT)
                     pw_page = context.new_page()
-                    pw_page.goto(url, timeout=15000, wait_until="networkidle")
+                    pw_page.goto(url, timeout=30000, wait_until="networkidle")
 
                     # Fill form fields with test data
                     test_data = {
@@ -3381,30 +3382,36 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
     ]
 
     issues = []
+    infra_failures = 0  # Track viewports that failed due to browser/timeout issues
 
     try:
-        if not PLAYWRIGHT_AVAILABLE:
+        # Get one browser for all viewports (avoids 3 cold starts)
+        cleanup_shared_browser()
+        browser = _get_shared_browser()
+        if not browser:
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
-                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
                 details="Could not launch browser for responsive testing. Manual verification recommended.",
             )]
 
         for vp in viewports:
-            # Fresh browser for each viewport to prevent memory buildup (OOM on 512MB)
-            cleanup_shared_browser()
-            for _attempt in range(2):  # Retry once on browser crash
+            for _attempt in range(2):  # Retry once on browser crash/timeout
                 try:
-                    browser = _get_shared_browser()
-                    if not browser:
-                        issues.append(f"{vp['name']}: Browser unavailable")
-                        break
+                    if _attempt == 1:
+                        # Second attempt: recover browser (fresh Chromium)
+                        browser = _recover_browser()
+                        if not browser:
+                            issues.append(f"{vp['name']}: Browser unrecoverable")
+                            infra_failures += 1
+                            break
+
                     context = browser.new_context(
                         viewport={"width": vp["width"], "height": vp["height"]},
                         user_agent=USER_AGENT
                     )
                     page = context.new_page()
-                    page.goto(homepage_url, timeout=30000)
+                    page.goto(homepage_url, timeout=60000)
                     page.wait_for_load_state("networkidle", timeout=15000)
 
                     # Check for horizontal overflow (common responsive issue)
@@ -3433,14 +3440,11 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
 
                 except Exception as e:
                     if _attempt == 0 and _is_browser_infra_error(e):
-                        print(f"  [Responsive] Browser crashed on {vp['name']}, recovering...")
-                        browser = _recover_browser()
-                        if not browser:
-                            issues.append(f"{vp['name']}: Browser unrecoverable")
-                            break
+                        print(f"  [Responsive] Browser error on {vp['name']}, recovering: {str(e)[:60]}")
                         continue  # Retry with fresh browser
                     else:
                         issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
+                        infra_failures += 1
                         break
 
     except Exception as e:
@@ -3451,6 +3455,13 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
         )]
 
     if issues:
+        # If ALL viewports failed due to infra/timeout, it's a WARN (couldn't test) not a FAIL
+        if infra_failures == len(viewports):
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
+                details="Could not complete responsive testing (browser timeouts). Manual verification recommended.\n" + "\n".join(issues),
+            )]
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="FAIL", weight=rule["weight"],
@@ -3521,8 +3532,8 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
                 for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
                     try:
                         pw_page = browser.new_page()
-                        pw_page.goto(contact_url, timeout=15000)
-                        pw_page.wait_for_load_state("networkidle", timeout=10000)
+                        pw_page.goto(contact_url, timeout=30000)
+                        pw_page.wait_for_load_state("networkidle", timeout=15000)
                         html = pw_page.content()
                         pw_page.close()
 

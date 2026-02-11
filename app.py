@@ -6,6 +6,7 @@ Flask web app that provides:
   3. Posts results back to Wrike tasks via API
 """
 
+import gc
 import json
 import os
 import time
@@ -147,6 +148,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     crawler = SiteCrawler(site_url)
     pages = crawler.crawl(max_pages=max_pages)
     progress("crawling", f"Found {len(pages)} pages")
+    crawler._cleanup_browser()  # Release browser reference before checks
 
     # Try PetDesk QA Plugin first (recommended - single API key for all sites)
     # Falls back to HUMAN_REVIEW if plugin not installed
@@ -206,7 +208,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     # detection, but the raw HTML strings are redundant once parsed.
     for page_data in pages.values():
         page_data.html = ""
-    import gc; gc.collect()
+    gc.collect()
 
     # 2. Run Playwright checks sequentially (one browser at a time).
     # Close and reopen browser between checks to prevent memory buildup
@@ -227,9 +229,11 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
 
     progress("report", "Generating report...")
 
-    # Apply partial penalties: warnings lose 50% of weight, pending human reviews lose 30%
+    # Apply penalties: failures lose full weight, warnings 50%, pending human reviews 30%
     for r in all_results:
-        if r.status == "WARN":
+        if r.status == "FAIL":
+            r.points_lost = r.weight
+        elif r.status == "WARN":
             r.points_lost = r.weight * 0.5
         elif r.status == "HUMAN_REVIEW":
             r.points_lost = r.weight * 0.3
@@ -1563,7 +1567,7 @@ def api_scan_stream():
                     # Send heartbeat comment to keep connection alive
                     yield ": keepalive\n\n"
 
-            thread.join()
+            thread.join(timeout=30)
 
             if result_holder["error"]:
                 yield f"data: {json.dumps({'step': 'error', 'detail': result_holder['error']})}\n\n"

@@ -10,8 +10,6 @@ RUN playwright install --with-deps chromium
 
 COPY . .
 
-ENV DOCKER_CONTAINER=1
-
 EXPOSE 5000
 
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "600", "--graceful-timeout", "10", "app:app"]
