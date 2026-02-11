@@ -296,7 +296,7 @@ class SiteCrawler:
                 viewport={"width": 1280, "height": 720},
             )
             pw_page = context.new_page()
-            pw_page.goto(url, timeout=15000, wait_until="networkidle")
+            pw_page.goto(url, timeout=30000, wait_until="domcontentloaded")
             rendered_html = pw_page.content()
 
             soup = BeautifulSoup(rendered_html, "lxml")
@@ -1575,7 +1575,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                         continue  # Try again
                     context = browser.new_context(user_agent=USER_AGENT)
                     pw_page = context.new_page()
-                    pw_page.goto(url, timeout=60000, wait_until="networkidle")
+                    pw_page.goto(url, timeout=30000, wait_until="domcontentloaded")
 
                     # Fill form fields with test data
                     test_data = {
@@ -1648,7 +1648,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     original_url = pw_page.url
                     try:
                         pw_page.click(submit_btn)
-                        pw_page.wait_for_load_state("networkidle", timeout=10000)
+                        pw_page.wait_for_load_state("domcontentloaded", timeout=5000)
                         # Extra wait for AJAX responses to render
                         pw_page.wait_for_timeout(2000)
                     except Exception:
@@ -3401,8 +3401,8 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                         user_agent=USER_AGENT
                     )
                     page = context.new_page()
-                    page.goto(homepage_url, timeout=60000)
-                    page.wait_for_load_state("networkidle", timeout=15000)
+                    page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
+                    page.wait_for_timeout(2000)  # Brief settle time for layout
 
                     # Check for horizontal overflow (common responsive issue)
                     has_overflow = page.evaluate("""
@@ -3514,8 +3514,8 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
                 for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
                     try:
                         pw_page = browser.new_page()
-                        pw_page.goto(contact_url, timeout=30000)
-                        pw_page.wait_for_load_state("networkidle", timeout=15000)
+                        pw_page.goto(contact_url, timeout=30000, wait_until="domcontentloaded")
+                        pw_page.wait_for_timeout(3000)  # Let JS-rendered maps load
                         html = pw_page.content()
                         pw_page.close()
 
@@ -3797,8 +3797,8 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     user_agent=USER_AGENT
                 )
                 page = context.new_page()
-                page.goto(homepage_url, timeout=60000)
-                page.wait_for_load_state("networkidle", timeout=15000)
+                page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)  # Let images/styles render for screenshot
 
                 # Take full page screenshot
                 screenshot = page.screenshot(full_page=False)  # Above-fold only for speed

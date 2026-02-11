@@ -126,13 +126,23 @@ def _get_scan_id(site_url: str, phase: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _mem_mb(label=""):
-    """Log current memory usage. Returns RSS in MB."""
+    """Log current memory usage including child processes (Chromium)."""
     proc = psutil.Process()
     rss = proc.memory_info().rss / 1024 / 1024
-    # Also get system-wide memory
-    vm = psutil.virtual_memory()
-    print(f"  [MEM] {label}: {rss:.0f}MB RSS | System: {vm.used/1024/1024:.0f}MB/{vm.total/1024/1024:.0f}MB ({vm.percent}%)", flush=True)
-    return rss
+    # Sum memory of all child processes (Chromium browser tree)
+    children_mb = 0
+    try:
+        for child in proc.children(recursive=True):
+            try:
+                children_mb += child.memory_info().rss / 1024 / 1024
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception:
+        pass
+    total = rss + children_mb
+    child_str = f" + {children_mb:.0f}MB children" if children_mb > 0 else ""
+    print(f"  [MEM] {label}: {rss:.0f}MB Python{child_str} = {total:.0f}MB total", flush=True)
+    return total
 
 
 def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progress_callback=None) -> ScanReport:
