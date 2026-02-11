@@ -4453,6 +4453,8 @@ Check for:
 4. Text overflow or truncation issues
 5. Overlapping elements
 
+IMPORTANT: Ignore any black/empty areas where videos or media would normally play. These appear blank because video was disabled for this screenshot. Do not flag missing videos, black video placeholders, or "source not found" messages as issues.
+
 If the page looks professionally designed with consistent alignment, spacing, and colors, respond: PASS
 
 If there are noticeable issues, respond: ISSUES: [list specific problems]
