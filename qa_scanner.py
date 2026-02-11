@@ -73,6 +73,7 @@ def _get_shared_browser():
         "--no-first-run",
         "--js-flags=--max-old-space-size=64",
         "--disable-software-rasterizer",
+        "--single-process",
     ]
     _shared_pw_browser = _shared_pw_instance.chromium.launch(
         headless=True,

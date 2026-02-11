@@ -228,14 +228,23 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     _mem_mb("After parallel checks")
 
     # Free as much page data as possible before launching Chromium (247MB).
-    # Browser checks use page.soup to find forms and maps. Keep only those soups.
+    # Only keep soups that browser checks actually need.
     _keep_urls = set()
     for url, pd in pages.items():
         if not pd.soup:
             continue
-        # Keep pages with forms (check_form_submission scans these)
-        if pd.soup.find("form"):
-            _keep_urls.add(url)
+        # Keep pages with CONTACT forms (not search/login/subscribe forms)
+        for form in pd.soup.find_all("form"):
+            if form.get("role") == "search":
+                continue
+            action = (form.get("action") or "").lower()
+            if any(x in action for x in ["search", "login", "subscribe"]):
+                continue
+            form_html = str(form).lower()
+            if any(x in form_html for x in ["contact", "inquiry", "appointment",
+                    "request", "message", "email", "phone"]):
+                _keep_urls.add(url)
+                break
         # Keep pages with Google Maps iframes (check_map_location)
         if any("google.com/maps" in (f.get("src", "") or "") for f in pd.soup.find_all("iframe")):
             _keep_urls.add(url)
@@ -251,28 +260,22 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     gc.collect()
     _mem_mb(f"After freeing page data ({freed}/{len(pages)} soups freed)")
 
-    # 2. Run Playwright checks sequentially, sharing a browser.
-    # Restart once after form submission (heaviest check, loads complex JS pages)
-    # to reclaim accumulated renderer memory. Keep browser alive for lighter
-    # checks (viewports, map, visual) that load the same homepage.
-    _RESTART_AFTER = {"check_form_submission"}  # Heavy checks that accumulate memory
+    # 2. Run Playwright checks sequentially.
+    # --single-process Chromium doesn't free page memory on context.close(),
+    # so restart browser after EVERY check that navigates pages.
+    # With domcontentloaded, each restart cycle is fast (~5s total).
     if sequential_rules:
         from qa_scanner import _get_shared_browser
-        _mem_mb("Before browser launch")
-        _get_shared_browser()  # Warm up browser before checks
-        _mem_mb("After browser launch")
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()
         progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
+        cleanup_shared_browser()
+        gc.collect()
+        _mem_mb(f"Before {fn_name}")
+        _get_shared_browser()
         all_results.extend(run_check(rule))
         _mem_mb(f"After {fn_name}")
-        if fn_name in _RESTART_AFTER:
-            cleanup_shared_browser()  # Reclaim memory after heavy check
-            gc.collect()
-            _mem_mb("After restart cleanup + gc")
-            _get_shared_browser()  # Fresh browser for remaining checks
-            _mem_mb("After browser relaunch")
 
     for rule in human_rules:
         all_results.append(CheckResult(
