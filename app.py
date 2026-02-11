@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
 
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
-from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache
+from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache, pre_extract_page_data, clear_pre_extracted_data
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
 from wp_api import PetDeskQAPluginClient, WordPressAPIClient, WP_CHECK_FUNCTIONS
 from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
@@ -227,34 +227,15 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
             all_results.extend(future.result())
     _mem_mb("After parallel checks")
 
-    # Free as much page data as possible before launching Chromium (247MB).
-    # Only keep soups that browser checks actually need.
-    _keep_urls = set()
-    for url, pd in pages.items():
-        if not pd.soup:
-            continue
-        # Keep pages with real contact forms (email input + textarea = message field)
-        # This skips search forms, newsletter forms, login forms — they lack textareas
-        for form in pd.soup.find_all("form"):
-            if form.get("role") == "search":
-                continue
-            inputs = form.find_all(["input", "textarea", "select"])
-            has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
-            has_textarea = bool(form.find("textarea"))
-            if has_email and has_textarea:
-                _keep_urls.add(url)
-                break
-        # Keep contact/about pages (map check needs address text + Playwright)
-        if any(x in url.lower() for x in ["contact", "location", "find-us", "about"]):
-            _keep_urls.add(url)
-    freed = 0
+    # Pre-extract data that browser checks need, then free ALL soups (~60MB savings).
+    # Form check needs: form field names/types for Playwright fill.
+    # Map check needs: iframe srcs and page text for address matching.
+    pre_extract_page_data(pages)
     for url, pd in pages.items():
         pd.html = ""
-        if url not in _keep_urls:
-            pd.soup = None
-            freed += 1
+        pd.soup = None
     gc.collect()
-    _mem_mb(f"After freeing page data ({freed}/{len(pages)} soups freed)")
+    _mem_mb(f"After freeing ALL page data ({len(pages)} soups freed)")
 
     # 2. Run Playwright checks sequentially.
     # --single-process Chromium doesn't free page memory on context.close(),
@@ -294,8 +275,9 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     total_points_lost = sum(r.points_lost for r in all_results)
     score = round(max(0, 100 - total_points_lost))
 
-    # Clean up shared Playwright browser and PSI cache to free memory
+    # Clean up shared Playwright browser, pre-extracted data, and PSI cache
     cleanup_shared_browser()
+    clear_pre_extracted_data()
     clear_psi_cache()
     gc.collect()
     _mem_mb("After final cleanup")

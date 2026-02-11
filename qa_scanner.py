@@ -37,6 +37,10 @@ MAX_PAGES_TO_CRAWL = 50
 _shared_pw_instance = None
 _shared_pw_browser = None
 
+# Pre-extracted page data for browser checks (set by app.py before freeing soups)
+_pre_extracted_forms = None   # list of form info dicts for check_form_submission
+_pre_extracted_map_data = None  # dict of url -> {iframe_srcs, text} for check_map_location
+
 
 def _get_shared_browser():
     """Get or create a shared Chromium browser for Playwright checks."""
@@ -132,6 +136,93 @@ def _recover_browser():
     gc.collect()
     time.sleep(1)  # Let OS reclaim memory before relaunching
     return _get_shared_browser()
+
+
+def pre_extract_page_data(pages):
+    """Pre-extract data from BeautifulSoup objects that browser checks need.
+
+    Call this before freeing page soups to save memory (~60MB for 30 pages).
+    Sets module-level _pre_extracted_forms and _pre_extracted_map_data.
+    """
+    global _pre_extracted_forms, _pre_extracted_map_data
+
+    # --- Extract form data for check_form_submission ---
+    forms = []
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+        for form in page.soup.find_all("form"):
+            if form.get("role") == "search":
+                continue
+            action = form.get("action", "").lower()
+            if "search" in action or "login" in action or "subscribe" in action:
+                continue
+
+            form_html = str(form).lower()
+            is_contact_form = any(x in form_html for x in [
+                "contact", "inquiry", "appointment", "request", "message",
+                "name", "email", "phone", "comment", "question"
+            ])
+
+            inputs = []
+            required_count = 0
+            has_email = False
+            has_name = False
+            for inp in form.find_all(["input", "textarea", "select"]):
+                inp_data = {
+                    "name": inp.get("name", ""),
+                    "type": inp.get("type", "text"),
+                    "tag": inp.name,  # "input", "textarea", or "select"
+                }
+                inputs.append(inp_data)
+                is_required = (inp.get("required") is not None
+                               or "required" in (inp.get("class") or []))
+                if is_required:
+                    required_count += 1
+                name_type = (inp_data["name"] + inp_data["type"]).lower()
+                if "email" in name_type:
+                    has_email = True
+                if "name" in inp_data["name"].lower():
+                    has_name = True
+
+            has_captcha = any(x in form_html for x in [
+                "recaptcha", "captcha", "hcaptcha", "g-recaptcha", "turnstile"
+            ])
+            is_complex = required_count > 10
+
+            if is_contact_form and (has_email or has_name):
+                forms.append({
+                    "url": url,
+                    "inputs": inputs,
+                    "has_captcha": has_captcha,
+                    "is_complex": is_complex,
+                    "required_count": required_count,
+                })
+
+    _pre_extracted_forms = forms
+
+    # --- Extract map/address data for check_map_location ---
+    map_data = {}
+    for url, page in pages.items():
+        if not page.soup:
+            continue
+        iframe_srcs = [iframe.get("src", "") for iframe in page.soup.find_all("iframe")]
+        text = page.soup.get_text()
+        if iframe_srcs or text:
+            map_data[url] = {
+                "iframe_srcs": iframe_srcs,
+                "text": text,
+            }
+
+    _pre_extracted_map_data = map_data
+    print(f"  [Pre-extract] {len(forms)} forms, {len(map_data)} pages with map/text data", flush=True)
+
+
+def clear_pre_extracted_data():
+    """Clear pre-extracted data after scan completes."""
+    global _pre_extracted_forms, _pre_extracted_map_data
+    _pre_extracted_forms = None
+    _pre_extracted_map_data = None
 
 
 def clear_psi_cache():
@@ -1479,50 +1570,43 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             details="Playwright not available. Test form submission manually.",
         )]
 
-    # Find all contact/inquiry forms (skip search forms, login forms, etc.)
-    forms_to_test = []
-    for url, page in pages.items():
-        if not page.soup:
-            continue
-        for form in page.soup.find_all("form"):
-            # Skip search forms
-            if form.get("role") == "search":
+    # Use pre-extracted form data if soups were freed to save memory
+    if _pre_extracted_forms is not None:
+        forms_to_test = list(_pre_extracted_forms)  # Already in the right format
+    else:
+        # Fallback: scan soups directly (local dev without memory constraints)
+        forms_to_test = []
+        for url, page in pages.items():
+            if not page.soup:
                 continue
-            action = form.get("action", "").lower()
-            if "search" in action or "login" in action or "subscribe" in action:
-                continue
-
-            # Look for contact/inquiry form indicators
-            form_html = str(form).lower()
-            is_contact_form = any(x in form_html for x in [
-                "contact", "inquiry", "appointment", "request", "message",
-                "name", "email", "phone", "comment", "question"
-            ])
-
-            # Check for required fields that suggest it's a contact form
-            inputs = form.find_all(["input", "textarea", "select"])
-            has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
-            has_name = any("name" in i.get("name", "").lower() for i in inputs)
-
-            # Skip forms with CAPTCHA (can't automate)
-            has_captcha = any(x in form_html for x in [
-                "recaptcha", "captcha", "hcaptcha", "g-recaptcha", "turnstile"
-            ])
-
-            # Skip complex forms with many required fields (new client forms, etc.)
-            required_fields = [i for i in inputs if i.get("required") is not None
-                              or "required" in i.get("class", [])]
-            is_complex = len(required_fields) > 10
-
-            if is_contact_form and (has_email or has_name):
-                forms_to_test.append({
-                    "url": url,
-                    "form": form,
-                    "inputs": inputs,
-                    "has_captcha": has_captcha,
-                    "is_complex": is_complex,
-                    "required_count": len(required_fields),
-                })
+            for form in page.soup.find_all("form"):
+                if form.get("role") == "search":
+                    continue
+                action = form.get("action", "").lower()
+                if "search" in action or "login" in action or "subscribe" in action:
+                    continue
+                form_html = str(form).lower()
+                is_contact_form = any(x in form_html for x in [
+                    "contact", "inquiry", "appointment", "request", "message",
+                    "name", "email", "phone", "comment", "question"
+                ])
+                inputs = form.find_all(["input", "textarea", "select"])
+                has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
+                has_name = any("name" in i.get("name", "").lower() for i in inputs)
+                has_captcha = any(x in form_html for x in [
+                    "recaptcha", "captcha", "hcaptcha", "g-recaptcha", "turnstile"
+                ])
+                required_fields = [i for i in inputs if i.get("required") is not None
+                                  or "required" in i.get("class", [])]
+                is_complex = len(required_fields) > 10
+                if is_contact_form and (has_email or has_name):
+                    forms_to_test.append({
+                        "url": url,
+                        "inputs": inputs,
+                        "has_captcha": has_captcha,
+                        "is_complex": is_complex,
+                        "required_count": len(required_fields),
+                    })
 
     if not forms_to_test:
         return [CheckResult(
@@ -1550,7 +1634,6 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 
         for form_info in forms_to_test[:3]:  # Test up to 3 forms
             url = form_info["url"]
-            form = form_info["form"]
             inputs = form_info["inputs"]
             short_url = url.split("//")[-1] if "//" in url else url
 
@@ -1590,9 +1673,17 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     }
 
                     for inp in inputs:
-                        inp_name = inp.get("name", "").lower()
-                        inp_type = inp.get("type", "text").lower()
-                        inp_tag = inp.name
+                        # Support both pre-extracted dicts and BeautifulSoup Tags
+                        if isinstance(inp, dict):
+                            inp_name = inp.get("name", "").lower()
+                            inp_type = inp.get("type", "text").lower()
+                            inp_tag = inp.get("tag", "input")
+                            actual_name = inp.get("name", "")
+                        else:
+                            inp_name = inp.get("name", "").lower()
+                            inp_type = inp.get("type", "text").lower()
+                            inp_tag = inp.name
+                            actual_name = inp.get("name", "")
 
                         if inp_type in ("submit", "hidden", "button"):
                             continue
@@ -1604,8 +1695,8 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                                 value = val
                                 break
 
-                        if value:
-                            selector = f'[name="{inp.get("name")}"]'
+                        if value and actual_name:
+                            selector = f'[name="{actual_name}"]'
                             try:
                                 if inp_tag == "textarea":
                                     pw_page.fill(selector, value)
@@ -3475,35 +3566,46 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
     page_address = None
     map_page_url = None
 
-    # First try to find map in crawled pages (static HTML)
-    for url, page in pages.items():
-        if not page.soup:
-            continue
-
-        # Look for Google Maps iframe
-        iframes = page.soup.find_all("iframe")
-        for iframe in iframes:
-            src = iframe.get("src", "")
-            if "google.com/maps" in src or "maps.google" in src:
-                # Extract coordinates from embed URL
-                # Format: !2d-81.39 (longitude) !3d40.79 (latitude) or q=lat,lng or center=lat,lng
-                coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
-                if coord_match:
-                    # !2d is longitude, !3d is latitude
-                    map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))  # (lat, lon)
-                    map_page_url = url
-                else:
-                    # Try q= or center= format (lat,lng)
-                    coord_match = re.search(r'(?:q=|center=)(-?\d+\.?\d*),(-?\d+\.?\d*)', src)
+    # Use pre-extracted map data if soups were freed, otherwise scan soups directly
+    if _pre_extracted_map_data is not None:
+        for url, data in _pre_extracted_map_data.items():
+            for src in data.get("iframe_srcs", []):
+                if "google.com/maps" in src or "maps.google" in src:
+                    coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
                     if coord_match:
-                        map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                        map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
                         map_page_url = url
-
-        # Look for address on page
-        text = page.soup.get_text()
-        addr_match = address_pattern.search(text)
-        if addr_match:
-            page_address = addr_match.group(0).strip()
+                    else:
+                        coord_match = re.search(r'(?:q=|center=)(-?\d+\.?\d*),(-?\d+\.?\d*)', src)
+                        if coord_match:
+                            map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                            map_page_url = url
+            text = data.get("text", "")
+            addr_match = address_pattern.search(text)
+            if addr_match:
+                page_address = addr_match.group(0).strip()
+    else:
+        # Fallback: scan soups directly (local dev)
+        for url, page in pages.items():
+            if not page.soup:
+                continue
+            iframes = page.soup.find_all("iframe")
+            for iframe in iframes:
+                src = iframe.get("src", "")
+                if "google.com/maps" in src or "maps.google" in src:
+                    coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
+                    if coord_match:
+                        map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
+                        map_page_url = url
+                    else:
+                        coord_match = re.search(r'(?:q=|center=)(-?\d+\.?\d*),(-?\d+\.?\d*)', src)
+                        if coord_match:
+                            map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
+                            map_page_url = url
+            text = page.soup.get_text()
+            addr_match = address_pattern.search(text)
+            if addr_match:
+                page_address = addr_match.group(0).strip()
 
     # If no map found, try Playwright for JS-rendered maps (contact pages often load maps via JS)
     if not map_coords and PLAYWRIGHT_AVAILABLE:
@@ -3793,15 +3895,15 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                 if not browser:
                     continue  # Try again
                 context = browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
+                    viewport={"width": 1280, "height": 720},
                     user_agent=USER_AGENT
                 )
                 page = context.new_page()
                 page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
                 page.wait_for_timeout(3000)  # Let images/styles render for screenshot
 
-                # Take full page screenshot
-                screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
+                # Take above-fold screenshot (smaller viewport = faster render)
+                screenshot = page.screenshot(full_page=False, timeout=60000)
                 context.close()
                 break  # Success
             except Exception as e:
