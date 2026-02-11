@@ -233,22 +233,18 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     for url, pd in pages.items():
         if not pd.soup:
             continue
-        # Keep pages with CONTACT forms (not search/login/subscribe forms)
+        # Keep pages with real contact forms (email input + textarea = message field)
+        # This skips search forms, newsletter forms, login forms — they lack textareas
         for form in pd.soup.find_all("form"):
             if form.get("role") == "search":
                 continue
-            action = (form.get("action") or "").lower()
-            if any(x in action for x in ["search", "login", "subscribe"]):
-                continue
-            form_html = str(form).lower()
-            if any(x in form_html for x in ["contact", "inquiry", "appointment",
-                    "request", "message", "email", "phone"]):
+            inputs = form.find_all(["input", "textarea", "select"])
+            has_email = any("email" in (i.get("name", "") + i.get("type", "")).lower() for i in inputs)
+            has_textarea = bool(form.find("textarea"))
+            if has_email and has_textarea:
                 _keep_urls.add(url)
                 break
-        # Keep pages with Google Maps iframes (check_map_location)
-        if any("google.com/maps" in (f.get("src", "") or "") for f in pd.soup.find_all("iframe")):
-            _keep_urls.add(url)
-        # Keep contact/about pages (map check uses Playwright + address extraction)
+        # Keep contact/about pages (map check needs address text + Playwright)
         if any(x in url.lower() for x in ["contact", "location", "find-us", "about"]):
             _keep_urls.add(url)
     freed = 0
