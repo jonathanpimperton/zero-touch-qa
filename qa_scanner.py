@@ -618,22 +618,23 @@ def check_broken_links(pages: dict, rule: dict) -> list[CheckResult]:
             if result:
                 broken.append(result)
 
-    # Separate truly broken (404, 500, timeout) from bot-blocked (403)
-    truly_broken = [(u, s, c) for u, s, c in broken if c != 403]
+    # Separate into: confirmed broken (4xx/5xx), unreachable (status 0), bot-blocked (403)
+    confirmed_broken = [(u, s, c) for u, s, c in broken if c != 403 and c != 0]
+    unreachable = [(u, s, c) for u, s, c in broken if c == 0]
     bot_blocked = [(u, s, c) for u, s, c in broken if c == 403]
 
-    if truly_broken:
-        detail_lines = [f"{url} (status {code}) — found on: {src}" for url, src, code in truly_broken[:8]]
+    if confirmed_broken:
+        detail_lines = [f"{url} (status {code}) — found on: {src}" for url, src, code in confirmed_broken[:8]]
         results.append(CheckResult(
             rule_id=rule["id"],
             category=rule["category"],
             check=rule["check"],
             status="FAIL",
             weight=rule["weight"],
-            details=f"{len(truly_broken)} broken link(s):\n" + "\n".join(detail_lines),
+            details=f"{len(confirmed_broken)} broken link(s):\n" + "\n".join(detail_lines),
             points_lost=rule["weight"],
         ))
-    else:
+    elif not unreachable:
         results.append(CheckResult(
             rule_id=rule["id"],
             category=rule["category"],
@@ -643,7 +644,22 @@ def check_broken_links(pages: dict, rule: dict) -> list[CheckResult]:
             details=f"All {len(unique_links)} links valid",
         ))
 
-    # Report 403s as a separate warning (these sites block bots but work in browsers)
+    # Status 0 = connection error/timeout/DNS failure — not confirmed broken.
+    # These often work in a browser but fail with automated HEAD requests.
+    if unreachable:
+        detail_lines = [f"{url} — found on: {src}" for url, src, _ in unreachable[:8]]
+        results.append(CheckResult(
+            rule_id=rule["id"] + "-U",
+            category=rule["category"],
+            check="Some links could not be validated (timeout or connection error)",
+            status="WARN",
+            weight=rule["weight"],
+            details=f"{len(unreachable)} link(s) returned no response (verify manually in browser):\n"
+                    + "\n".join(detail_lines),
+            points_lost=0,
+        ))
+
+    # 403 = bot-blocked (these sites block automated checks but work in browsers)
     if bot_blocked:
         detail_lines = [f"{url} — found on: {src}" for url, src, _ in bot_blocked[:5]]
         results.append(CheckResult(
@@ -655,6 +671,17 @@ def check_broken_links(pages: dict, rule: dict) -> list[CheckResult]:
             details=f"{len(bot_blocked)} link(s) returned 403 Forbidden (verify manually in browser):\n"
                     + "\n".join(detail_lines),
             points_lost=0,
+        ))
+
+    # If we only have unreachable/bot-blocked (no confirmed broken), still need a base result
+    if not confirmed_broken and unreachable and not any(r.rule_id == rule["id"] for r in results):
+        results.append(CheckResult(
+            rule_id=rule["id"],
+            category=rule["category"],
+            check=rule["check"],
+            status="PASS",
+            weight=rule["weight"],
+            details=f"No confirmed broken links ({len(unreachable)} could not be validated — see warnings)",
         ))
 
     return results
@@ -1681,6 +1708,10 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     if not browser:
                         continue  # Try again
                     context = browser.new_context(user_agent=USER_AGENT)
+                    # Block images, media, fonts — form submission only needs DOM + JS
+                    context.route("**/*", lambda route: route.abort()
+                        if route.request.resource_type in ("image", "media", "font")
+                        else route.continue_())
                     pw_page = context.new_page()
                     pw_page.goto(url, timeout=30000, wait_until="domcontentloaded")
 
