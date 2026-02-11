@@ -1973,6 +1973,10 @@ def _get_psi_data(url: str) -> dict | None:
     if PSI_API_KEY:
         params["key"] = PSI_API_KEY
 
+    if not PSI_API_KEY:
+        _psi_cache[url] = None
+        return None
+
     try:
         resp = requests.get(api_url, params=params, timeout=60)
         if resp.status_code == 200:
@@ -1980,11 +1984,17 @@ def _get_psi_data(url: str) -> dict | None:
             _psi_cache[url] = data
             return data
         else:
-            print(f"  [PSI] API returned {resp.status_code} for {url}")
+            # Log response body for debugging (truncated)
+            body = ""
+            try:
+                body = resp.text[:500]
+            except Exception:
+                pass
+            print(f"  [PSI] API returned {resp.status_code} for {url}: {body}", flush=True)
             _psi_cache[url] = None
             return None
     except Exception as e:
-        print(f"  [PSI] Error fetching {url}: {e}")
+        print(f"  [PSI] Error fetching {url}: {e}", flush=True)
         _psi_cache[url] = None
         return None
 
