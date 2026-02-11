@@ -12,6 +12,7 @@ import os
 import time
 import base64
 import threading
+import psutil
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -124,6 +125,16 @@ def _get_scan_id(site_url: str, phase: str) -> str:
 # Core scan engine (shared between web UI and Wrike webhook)
 # ---------------------------------------------------------------------------
 
+def _mem_mb(label=""):
+    """Log current memory usage. Returns RSS in MB."""
+    proc = psutil.Process()
+    rss = proc.memory_info().rss / 1024 / 1024
+    # Also get system-wide memory
+    vm = psutil.virtual_memory()
+    print(f"  [MEM] {label}: {rss:.0f}MB RSS | System: {vm.used/1024/1024:.0f}MB/{vm.total/1024/1024:.0f}MB ({vm.percent}%)")
+    return rss
+
+
 def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progress_callback=None) -> ScanReport:
     """Run the full QA scan against a site.
 
@@ -139,6 +150,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
             progress_callback(step, detail)
 
     progress("connecting", f"Connecting to {site_url}...")
+    _mem_mb("Scan start")
     rules = get_rules_for_scan(partner, phase)
     auto_rules = get_automatable_rules(rules)
     human_rules = get_human_review_rules(rules)
@@ -148,6 +160,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     crawler = SiteCrawler(site_url)
     pages = crawler.crawl(max_pages=max_pages)
     progress("crawling", f"Found {len(pages)} pages")
+    _mem_mb(f"After crawl ({len(pages)} pages)")
     crawler._cleanup_browser()  # Release browser reference before checks
 
     # Try PetDesk QA Plugin first (recommended - single API key for all sites)
@@ -198,10 +211,12 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
 
     # 1. Run fast checks in parallel (no Playwright)
     progress("checks", f"Running {len(parallel_rules)} fast checks in parallel...")
+    _mem_mb("Before parallel checks")
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(run_check, rule): rule for rule in parallel_rules}
         for future in as_completed(futures):
             all_results.extend(future.result())
+    _mem_mb("After parallel checks")
 
     # Free raw HTML strings to reclaim memory before launching Chromium.
     # Browser checks still need page.soup (BeautifulSoup) for form/map/image
@@ -209,6 +224,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     for page_data in pages.values():
         page_data.html = ""
     gc.collect()
+    _mem_mb("After freeing HTML + gc")
 
     # 2. Run Playwright checks sequentially, sharing a browser.
     # Restart once after form submission (heaviest check, loads complex JS pages)
@@ -217,16 +233,21 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     _RESTART_AFTER = {"check_form_submission"}  # Heavy checks that accumulate memory
     if sequential_rules:
         from qa_scanner import _get_shared_browser
+        _mem_mb("Before browser launch")
         _get_shared_browser()  # Warm up browser before checks
+        _mem_mb("After browser launch")
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()
         progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
         all_results.extend(run_check(rule))
+        _mem_mb(f"After {fn_name}")
         if fn_name in _RESTART_AFTER:
             cleanup_shared_browser()  # Reclaim memory after heavy check
             gc.collect()
+            _mem_mb("After restart cleanup + gc")
             _get_shared_browser()  # Fresh browser for remaining checks
+            _mem_mb("After browser relaunch")
 
     for rule in human_rules:
         all_results.append(CheckResult(
@@ -252,6 +273,8 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     # Clean up shared Playwright browser and PSI cache to free memory
     cleanup_shared_browser()
     clear_psi_cache()
+    gc.collect()
+    _mem_mb("After final cleanup")
 
     report = ScanReport(
         site_url=site_url, partner=partner, phase=phase,
