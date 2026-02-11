@@ -1565,16 +1565,21 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 continue
 
             # Fresh browser for each form to prevent memory buildup (OOM on 512MB)
+            _FORM_TIMEOUTS = [30000, 45000, 60000]
             cleanup_shared_browser()
-            for _attempt in range(2):  # Retry once on browser crash
+            for _attempt in range(3):  # Up to 3 attempts per form
                 try:
+                    if _attempt > 0:
+                        gc.collect()
+                        time.sleep(1)
                     browser = _get_shared_browser()
                     if not browser:
-                        forms_infra_errors.append(f"{short_url} - Browser unavailable")
-                        break
+                        browser = _recover_browser()
+                    if not browser:
+                        continue  # Try again
                     context = browser.new_context(user_agent=USER_AGENT)
                     pw_page = context.new_page()
-                    pw_page.goto(url, timeout=30000, wait_until="networkidle")
+                    pw_page.goto(url, timeout=_FORM_TIMEOUTS[_attempt], wait_until="networkidle")
 
                     # Fill form fields with test data
                     test_data = {
@@ -1688,16 +1693,17 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     break  # Success — exit retry loop
 
                 except Exception as e:
-                    if _attempt == 0 and _is_browser_infra_error(e):
-                        # Browser crashed — recover and retry this form
-                        print(f"  [Forms] Browser crashed testing {short_url}, recovering...")
+                    print(f"  [Forms] Attempt {_attempt+1}/3 failed on {short_url}: {str(e)[:60]}")
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    if _attempt < 2 and _is_browser_infra_error(e):
+                        # Browser crashed/timed out — recover and retry
                         browser = _recover_browser()
-                        if not browser:
-                            forms_infra_errors.append(f"{short_url} - Browser unrecoverable")
-                            break
-                        continue  # Retry with fresh browser
+                        continue
                     else:
-                        # Second attempt failed, or non-infra error
+                        # Final attempt failed, or non-infra error
                         err_str = str(e)
                         if _is_browser_infra_error(e):
                             forms_infra_errors.append(f"{short_url} - Error: {err_str[:50]}")
@@ -1732,14 +1738,14 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             details=f"All forms require manual testing:\n{skip_detail}",
         ))
     elif forms_infra_errors and not forms_failed and forms_passed == 0:
-        # All tested forms hit infrastructure errors (browser crash) — not real failures
-        detail = f"Browser error prevented form testing ({len(forms_infra_errors)} form(s)). Test manually:\n"
+        # All tested forms hit infrastructure errors after 3 retries each
+        detail = f"Browser errors testing {len(forms_infra_errors)} form(s) after retries:\n"
         detail += "\n".join(f"• {f}" for f in forms_infra_errors)
         if skip_detail:
             detail += f"\n\n{skip_detail}"
         results.append(CheckResult(
             rule_id=rule["id"], category=rule["category"],
-            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
             details=detail,
         ))
     elif forms_failed:
@@ -3382,36 +3388,33 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
     ]
 
     issues = []
-    infra_failures = 0  # Track viewports that failed due to browser/timeout issues
+    _VIEWPORT_TIMEOUTS = [60000, 90000, 120000]  # Escalating timeouts per retry
 
     try:
         # Get one browser for all viewports (avoids 3 cold starts)
         cleanup_shared_browser()
+        gc.collect()
         browser = _get_shared_browser()
-        if not browser:
-            return [CheckResult(
-                rule_id=rule["id"], category=rule["category"],
-                check=rule["check"], status="WARN", weight=rule["weight"],
-                details="Could not launch browser for responsive testing. Manual verification recommended.",
-            )]
 
         for vp in viewports:
-            for _attempt in range(2):  # Retry once on browser crash/timeout
+            vp_success = False
+            for _attempt in range(3):  # Up to 3 attempts per viewport
                 try:
-                    if _attempt == 1:
-                        # Second attempt: recover browser (fresh Chromium)
+                    if browser is None or _attempt > 0:
+                        # Recover browser with memory breathing room
+                        gc.collect()
+                        time.sleep(1)
                         browser = _recover_browser()
-                        if not browser:
-                            issues.append(f"{vp['name']}: Browser unrecoverable")
-                            infra_failures += 1
-                            break
+                    if not browser:
+                        continue  # Try again
 
+                    timeout_ms = _VIEWPORT_TIMEOUTS[_attempt]
                     context = browser.new_context(
                         viewport={"width": vp["width"], "height": vp["height"]},
                         user_agent=USER_AGENT
                     )
                     page = context.new_page()
-                    page.goto(homepage_url, timeout=60000)
+                    page.goto(homepage_url, timeout=timeout_ms)
                     page.wait_for_load_state("networkidle", timeout=15000)
 
                     # Check for horizontal overflow (common responsive issue)
@@ -3436,32 +3439,24 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                         issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
 
                     context.close()
+                    vp_success = True
                     break  # Success — exit retry loop
 
                 except Exception as e:
-                    if _attempt == 0 and _is_browser_infra_error(e):
-                        print(f"  [Responsive] Browser error on {vp['name']}, recovering: {str(e)[:60]}")
+                    print(f"  [Responsive] Attempt {_attempt+1}/3 failed on {vp['name']}: {str(e)[:60]}")
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    if _attempt < 2:
                         continue  # Retry with fresh browser
                     else:
-                        issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
-                        infra_failures += 1
-                        break
+                        issues.append(f"{vp['name']}: Failed after 3 attempts - {str(e)[:50]}")
 
     except Exception as e:
-        return [CheckResult(
-            rule_id=rule["id"], category=rule["category"],
-            check=rule["check"], status="WARN", weight=rule["weight"],
-            details=f"Responsive test failed: {str(e)[:100]}. Manual verification recommended.",
-        )]
+        issues.append(f"Responsive test error: {str(e)[:100]}")
 
     if issues:
-        # If ALL viewports failed due to infra/timeout, it's a WARN (couldn't test) not a FAIL
-        if infra_failures == len(viewports):
-            return [CheckResult(
-                rule_id=rule["id"], category=rule["category"],
-                check=rule["check"], status="WARN", weight=rule["weight"],
-                details="Could not complete responsive testing (browser timeouts). Manual verification recommended.\n" + "\n".join(issues),
-            )]
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="FAIL", weight=rule["weight"],
@@ -3800,23 +3795,25 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
     try:
-        # Take screenshot (with retry on browser crash)
+        # Take screenshot (with retry on browser crash/timeout)
         screenshot = None
-        for _attempt in range(2):
+        _VISUAL_TIMEOUTS = [30000, 60000, 90000]
+        for _attempt in range(3):
             try:
-                browser = _get_shared_browser()
+                if _attempt > 0:
+                    gc.collect()
+                    time.sleep(1)
+                    browser = _recover_browser()
+                else:
+                    browser = _get_shared_browser()
                 if not browser:
-                    return [CheckResult(
-                        rule_id=rule["id"], category=rule["category"],
-                        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                        details="Could not launch browser for screenshots. Manual review needed.",
-                    )]
+                    continue  # Try again
                 context = browser.new_context(
                     viewport={"width": 1920, "height": 1080},
                     user_agent=USER_AGENT
                 )
                 page = context.new_page()
-                page.goto(homepage_url, timeout=30000)
+                page.goto(homepage_url, timeout=_VISUAL_TIMEOUTS[_attempt])
                 page.wait_for_load_state("networkidle", timeout=15000)
 
                 # Take full page screenshot
@@ -3824,16 +3821,17 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                 context.close()
                 break  # Success
             except Exception as e:
-                if _attempt == 0 and _is_browser_infra_error(e):
-                    print(f"  [Visual] Browser crashed taking screenshot, recovering...")
-                    browser = _recover_browser()
-                    if not browser:
-                        raise  # Will be caught by outer except
-                    continue  # Retry
+                print(f"  [Visual] Attempt {_attempt+1}/3 failed: {str(e)[:60]}")
+                try:
+                    context.close()
+                except Exception:
+                    pass
+                if _attempt < 2:
+                    continue  # Retry with fresh browser
                 else:
                     raise  # Will be caught by outer except
         if not screenshot:
-            raise RuntimeError("Failed to capture screenshot after retry")
+            raise RuntimeError("Failed to capture screenshot after 3 attempts")
 
         prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
 
