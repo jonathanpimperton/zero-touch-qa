@@ -1537,8 +1537,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
     forms_infra_errors = []  # Browser/infrastructure errors (not real form failures)
 
     try:
-        browser = _get_shared_browser()
-        if not browser:
+        if not PLAYWRIGHT_AVAILABLE:
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
@@ -1564,8 +1563,14 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 forms_skipped_complex.append(f"{short_url} ({form_info.get('required_count', '?')} required fields)")
                 continue
 
+            # Fresh browser for each form to prevent memory buildup (OOM on 512MB)
+            cleanup_shared_browser()
             for _attempt in range(2):  # Retry once on browser crash
                 try:
+                    browser = _get_shared_browser()
+                    if not browser:
+                        forms_infra_errors.append(f"{short_url} - Browser unavailable")
+                        break
                     context = browser.new_context(user_agent=USER_AGENT)
                     pw_page = context.new_page()
                     pw_page.goto(url, timeout=15000, wait_until="networkidle")
@@ -3378,8 +3383,7 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
     issues = []
 
     try:
-        browser = _get_shared_browser()
-        if not browser:
+        if not PLAYWRIGHT_AVAILABLE:
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
@@ -3387,8 +3391,14 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
             )]
 
         for vp in viewports:
+            # Fresh browser for each viewport to prevent memory buildup (OOM on 512MB)
+            cleanup_shared_browser()
             for _attempt in range(2):  # Retry once on browser crash
                 try:
+                    browser = _get_shared_browser()
+                    if not browser:
+                        issues.append(f"{vp['name']}: Browser unavailable")
+                        break
                     context = browser.new_context(
                         viewport={"width": vp["width"], "height": vp["height"]},
                         user_agent=USER_AGENT
