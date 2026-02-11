@@ -604,9 +604,27 @@ def check_broken_links(pages: dict, rule: dict) -> list[CheckResult]:
         try:
             r = session.head(link_url, timeout=10, allow_redirects=True)
             if r.status_code >= 400:
+                # HEAD failed — retry with GET (many sites reject HEAD but accept GET)
+                if r.status_code in (405, 403, 0):
+                    try:
+                        r2 = session.get(link_url, timeout=10, allow_redirects=True, stream=True)
+                        r2.close()  # Don't download body
+                        if r2.status_code < 400:
+                            return None  # GET succeeded — link is fine
+                        return (link_url, source, r2.status_code)
+                    except requests.RequestException:
+                        pass
                 return (link_url, source, r.status_code)
         except requests.RequestException:
-            return (link_url, source, 0)
+            # HEAD timed out or connection error — retry with GET
+            try:
+                r2 = session.get(link_url, timeout=10, allow_redirects=True, stream=True)
+                r2.close()
+                if r2.status_code < 400:
+                    return None  # GET succeeded
+                return (link_url, source, r2.status_code)
+            except requests.RequestException:
+                return (link_url, source, 0)
         return None
 
     # Check links in parallel
