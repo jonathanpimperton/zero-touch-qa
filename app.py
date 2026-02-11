@@ -131,7 +131,7 @@ def _mem_mb(label=""):
     rss = proc.memory_info().rss / 1024 / 1024
     # Also get system-wide memory
     vm = psutil.virtual_memory()
-    print(f"  [MEM] {label}: {rss:.0f}MB RSS | System: {vm.used/1024/1024:.0f}MB/{vm.total/1024/1024:.0f}MB ({vm.percent}%)")
+    print(f"  [MEM] {label}: {rss:.0f}MB RSS | System: {vm.used/1024/1024:.0f}MB/{vm.total/1024/1024:.0f}MB ({vm.percent}%)", flush=True)
     return rss
 
 
