@@ -14,6 +14,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
 import requests
