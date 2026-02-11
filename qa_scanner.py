@@ -4383,12 +4383,14 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
     try:
+        import time as _time
         # Take screenshot (with retry on browser crash/timeout)
         # Use smaller viewport + block heavy resources + disable animations
         screenshot = None
         context = None
         pw_page = None
-        print(f"  [Visual] Starting: url={homepage_url}, viewport=1024x768, full_page=False", flush=True)
+        visual_start = _time.time()
+        print(f"  [Visual] Starting: url={homepage_url}, viewport=1024x768, full_page=False, timeout=20s", flush=True)
         for _attempt in range(2):  # Max 2 attempts (was 3)
             try:
                 if _attempt == 0:
@@ -4405,24 +4407,25 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     user_agent=USER_AGENT,
                     reduced_motion="reduce",
                 )
-                # Block heavy resources — we only need DOM + CSS for visual check
-                context.route("**/*.{mp4,webm,ogg,wav,mp3,woff2,ttf,eot}", lambda route: route.abort())
+                # Block heavy resources by type — we only need DOM + CSS + images
+                context.route("**/*", lambda route: route.abort() if route.request.resource_type in ("media", "font") else route.continue_())
                 pw_page = context.new_page()
-                # Inject CSS to disable animations before navigation
+                # Disable animations (add_init_script runs before page scripts)
                 pw_page.add_init_script("""
-                    document.addEventListener('DOMContentLoaded', () => {
-                        const style = document.createElement('style');
-                        style.textContent = '*, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }';
-                        document.head.appendChild(style);
-                    });
+                    const style = document.createElement('style');
+                    style.textContent = '*, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }';
+                    document.head.appendChild(style);
                 """)
                 pw_page.goto(homepage_url, timeout=20000, wait_until="domcontentloaded")
                 pw_page.wait_for_timeout(2000)  # Brief settle for CSS layout
 
                 screenshot = pw_page.screenshot(full_page=False, timeout=20000)
+                elapsed = _time.time() - visual_start
+                print(f"  [Visual] Screenshot captured in {elapsed:.1f}s (attempt {_attempt+1})", flush=True)
                 break  # Success
             except Exception as e:
-                print(f"  [Visual] Attempt {_attempt+1}/2 failed: {str(e)[:60]}", flush=True)
+                elapsed = _time.time() - visual_start
+                print(f"  [Visual] Attempt {_attempt+1}/2 failed after {elapsed:.1f}s: {str(e)[:60]}", flush=True)
                 if _attempt >= 1:
                     raise  # Will be caught by outer except
             finally:
