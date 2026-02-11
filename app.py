@@ -201,12 +201,22 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         for future in as_completed(futures):
             all_results.extend(future.result())
 
-    # 2. Run Playwright checks sequentially (one browser at a time)
+    # Free raw HTML strings to reclaim memory before launching Chromium.
+    # Browser checks still need page.soup (BeautifulSoup) for form/map/image
+    # detection, but the raw HTML strings are redundant once parsed.
+    for page_data in pages.values():
+        page_data.html = ""
+    import gc; gc.collect()
+
+    # 2. Run Playwright checks sequentially (one browser at a time).
+    # Close and reopen browser between checks to prevent memory buildup
+    # from accumulated page navigations in Chromium's renderer.
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()
         progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
         all_results.extend(run_check(rule))
+        cleanup_shared_browser()  # Free Chromium memory between checks
 
     for rule in human_rules:
         all_results.append(CheckResult(

@@ -165,7 +165,7 @@ Key functions in `db.py`:
 - `cta` - CTA text and placement (partner-specific)
 - `forms` - New client form, career page tracking URL
 - `partner_specific` - Partner-specific rules for Western, Heartland, United, Rarebreed, EverVet, Encore, AmeriVet (career widgets, layout requirements, naming conventions)
-- `human_review` - Brand tone, image appropriateness, visual consistency (cannot be automated). Report provides Pass/Fail/N/A buttons and a comments field for each item. Human FAIL decisions lower the score (by the item's weight); PASS keeps it unchanged. Human review items only appear in the dedicated checklist section, not duplicated in category tables.
+- `human_review` - Brand tone, image appropriateness, visual consistency (cannot be automated). Report provides Pass/Fail/N/A buttons and a comments field for each item. The initial score includes a 30% pending penalty for each unreviewed human item. PASS or N/A restores that penalty (score goes up). FAIL increases it from 30% to 100% of the item's weight (score goes down). Score updates in real-time via JavaScript. Human review items only appear in the dedicated checklist section, not duplicated in category tables.
 
 ## Human Review Persistence
 
@@ -173,6 +173,12 @@ Human review decisions (Pass/Fail/N/A + comments) are automatically saved to the
 - Close a report and return later without losing work
 - Share reports with other team members who can see completed reviews
 - Build an audit trail of who reviewed what and when
+
+**Score updates in real-time as reviews are completed.** The initial score already includes a 30% pending penalty for every human review item (assumes partial failure until reviewed). As items are reviewed:
+- **PASS or N/A** → restores the 30% penalty, so the score goes **up**
+- **FAIL** → increases the penalty from 30% to 100% of the item's weight, so the score goes **down**
+- The score ring, color, assessment text, and progress bar all update instantly in the browser
+- "Ready for Delivery" (green) requires score >= 95, zero automated failures, **and** all human review items completed
 
 Database table: `human_reviews` stores report_filename, item_index, rule_id, decision, comments, and reviewed_at timestamp. API endpoints:
 - `POST /api/review` - saves a single review decision
@@ -347,7 +353,7 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 8. Every error includes the exact page URL where it was found
 9. Results are collected, scored (100 - weighted failures), and formatted
 10. Scan saved to PostgreSQL (primary) and filesystem (fallback)
-11. Human review checklist allows Pass/Fail/N/A with comments; FAIL decisions lower the score in real-time
+11. Human review checklist allows Pass/Fail/N/A with comments; score updates in real-time (PASS/N/A restores pending penalty, FAIL increases it). Decisions persist to database via `/api/review`
 
 ## Report Layout
 
@@ -370,9 +376,10 @@ No SKIP status exists in the report. Checks that can't run automatically are fla
 
 The scoring system ensures honest assessments:
 
-- **Score calculation**: 100 - sum(weight) for each FAIL. Warnings don't lose points.
+- **Score calculation**: 100 - sum(weight) for each FAIL - sum(weight * 0.3) for each pending human review item. Warnings don't lose points.
+- **Human review penalty**: Unreviewed items carry a 30% pending penalty (honest scoring — the score assumes partial failure until a human confirms). PASS/N/A restores the penalty; FAIL increases it to 100%.
 - **Weights**: 1 (minor) to 5 (critical). Total possible penalty: 83 points from automated checks.
-- **"Ready for Delivery" requires**: Score 95+ AND zero failures. Any failure blocks this status.
+- **"Ready for Delivery" requires**: Score 95+ AND zero failures AND all human review items completed. Any failure or unfinished review blocks this status.
 - **Critical failures (weight 5)**: Broken links, social links in wrong place, meta titles/descriptions missing. These show "Critical Issues - Fix Before Delivery" even with high scores.
 
 | Score | Failures | Color | Assessment |

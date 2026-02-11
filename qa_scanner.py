@@ -6,6 +6,7 @@ Uses PageSpeed Insights API for rendered-page validation (mobile, performance, a
 """
 
 import copy
+import gc
 import os
 import re
 import json
@@ -57,6 +58,7 @@ def _get_shared_browser():
                 _shared_pw_instance = None
     if not PLAYWRIGHT_AVAILABLE:
         return None
+    gc.collect()  # Reclaim memory before launching Chromium
     _shared_pw_instance = sync_playwright().start()
     launch_args = [
         "--no-sandbox",
@@ -69,11 +71,10 @@ def _get_shared_browser():
         "--disable-sync",
         "--disable-translate",
         "--no-first-run",
-        "--js-flags=--max-old-space-size=128",
+        "--js-flags=--max-old-space-size=64",
+        "--disable-software-rasterizer",
+        "--single-process",
     ]
-    # --single-process collapses Chromium sub-processes, saves ~100MB in Docker
-    if os.environ.get("DOCKER_CONTAINER"):
-        launch_args.append("--single-process")
     _shared_pw_browser = _shared_pw_instance.chromium.launch(
         headless=True,
         args=launch_args,
@@ -115,7 +116,6 @@ def _is_browser_infra_error(error: Exception) -> bool:
 def _recover_browser():
     """Force-kill the shared browser and launch a fresh one. Returns new browser or None."""
     global _shared_pw_instance, _shared_pw_browser
-    # Force the globals to None so _get_shared_browser() relaunches
     if _shared_pw_browser:
         try:
             _shared_pw_browser.close()
@@ -128,6 +128,8 @@ def _recover_browser():
         except Exception:
             pass
         _shared_pw_instance = None
+    gc.collect()
+    time.sleep(1)  # Let OS reclaim memory before relaunching
     return _get_shared_browser()
 
 
