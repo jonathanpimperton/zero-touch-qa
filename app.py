@@ -210,17 +210,23 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         page_data.html = ""
     gc.collect()
 
-    # 2. Run Playwright checks sequentially, sharing one browser.
-    # Launch once, reuse across all checks, only clean up at the end.
-    # Individual checks create/close contexts but keep the browser alive.
+    # 2. Run Playwright checks sequentially, sharing a browser.
+    # Restart once after form submission (heaviest check, loads complex JS pages)
+    # to reclaim accumulated renderer memory. Keep browser alive for lighter
+    # checks (viewports, map, visual) that load the same homepage.
+    _RESTART_AFTER = {"check_form_submission"}  # Heavy checks that accumulate memory
     if sequential_rules:
         from qa_scanner import _get_shared_browser
-        _get_shared_browser()  # Warm up browser once before all checks
+        _get_shared_browser()  # Warm up browser before checks
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()
         progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
         all_results.extend(run_check(rule))
+        if fn_name in _RESTART_AFTER:
+            cleanup_shared_browser()  # Reclaim memory after heavy check
+            gc.collect()
+            _get_shared_browser()  # Fresh browser for remaining checks
 
     for rule in human_rules:
         all_results.append(CheckResult(
