@@ -41,7 +41,20 @@ def _get_shared_browser():
     """Get or create a shared Chromium browser for Playwright checks."""
     global _shared_pw_instance, _shared_pw_browser
     if _shared_pw_browser is not None:
-        return _shared_pw_browser
+        # Verify the browser is still alive by attempting a lightweight operation
+        try:
+            _shared_pw_browser.contexts  # Raises if browser process is dead
+            return _shared_pw_browser
+        except Exception:
+            # Browser crashed — clean up and relaunch below
+            print("  [Browser] Shared browser crashed, relaunching...")
+            _shared_pw_browser = None
+            if _shared_pw_instance:
+                try:
+                    _shared_pw_instance.stop()
+                except Exception:
+                    pass
+                _shared_pw_instance = None
     if not PLAYWRIGHT_AVAILABLE:
         return None
     _shared_pw_instance = sync_playwright().start()
@@ -188,6 +201,15 @@ class SiteCrawler:
         self._browser = None
         self.js_rendered_pages: set = set()
 
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """Normalize URL by stripping trailing slash (except root path)."""
+        parsed = urllib.parse.urlparse(url)
+        path = parsed.path
+        if path != "/" and path.endswith("/"):
+            path = path.rstrip("/")
+        return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+
     def _needs_js_rendering(self, page: PageData) -> bool:
         """Detect if a page likely has JS-rendered content that requests missed."""
         if PLAYWRIGHT_ALWAYS:
@@ -265,6 +287,7 @@ class SiteCrawler:
 
     def fetch_page(self, url: str) -> Optional[PageData]:
         """Fetch a single page and return PageData."""
+        url = self._normalize_url(url)
         if url in self.visited:
             return self.pages.get(url)
         self.visited.add(url)
@@ -352,6 +375,7 @@ class SiteCrawler:
                     for link in page.links:
                         link_parsed = urllib.parse.urlparse(link)
                         clean_link = f"{link_parsed.scheme}://{link_parsed.netloc}{link_parsed.path}"
+                        clean_link = self._normalize_url(clean_link)
                         if (link_parsed.netloc == self.domain and
                                 clean_link not in self.visited and
                                 clean_link not in queue):
@@ -376,7 +400,9 @@ def check_leftover_text(pages: dict, rule: dict) -> list[CheckResult]:
     found_on = []
 
     for url, page in pages.items():
-        if page.html and search.lower() in page.html.lower():
+        # Search visible text only (not raw HTML) to avoid matching CSS/JS
+        text = page.soup.get_text().lower() if page.soup else ""
+        if text and search.lower() in text:
             found_on.append(url)
 
     if found_on:
@@ -1470,6 +1496,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
     results = []
     forms_passed = 0
     forms_failed = []
+    forms_infra_errors = []  # Browser/infrastructure errors (not real form failures)
 
     try:
         browser = _get_shared_browser()
@@ -1616,7 +1643,16 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 
             except Exception as e:
                 short_url = url.split("//")[-1] if "//" in url else url
-                forms_failed.append(f"{short_url} - Error: {str(e)[:50]}")
+                err_str = str(e)
+                # Distinguish browser infrastructure errors from real form failures
+                infra_keywords = ["Target page, context or browser",
+                                  "Browser.new_context", "BrowserContext.new_page",
+                                  "browser has been closed", "Connection closed",
+                                  "Target closed", "Protocol error"]
+                if any(kw.lower() in err_str.lower() for kw in infra_keywords):
+                    forms_infra_errors.append(f"{short_url} - Error: {err_str[:50]}")
+                else:
+                    forms_failed.append(f"{short_url} - Error: {err_str[:50]}")
 
     except Exception as e:
         return [CheckResult(
@@ -1626,7 +1662,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
     # Report results
-    total_tested = forms_passed + len(forms_failed)
+    total_tested = forms_passed + len(forms_failed) + len(forms_infra_errors)
     total_skipped = len(forms_skipped_captcha) + len(forms_skipped_complex)
 
     # Build skip notes
@@ -1644,9 +1680,23 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
             details=f"All forms require manual testing:\n{skip_detail}",
         ))
+    elif forms_infra_errors and not forms_failed and forms_passed == 0:
+        # All tested forms hit infrastructure errors (browser crash) — not real failures
+        detail = f"Browser error prevented form testing ({len(forms_infra_errors)} form(s)). Test manually:\n"
+        detail += "\n".join(f"• {f}" for f in forms_infra_errors)
+        if skip_detail:
+            detail += f"\n\n{skip_detail}"
+        results.append(CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+            details=detail,
+        ))
     elif forms_failed:
         detail = f"{len(forms_failed)} of {total_tested} form(s) failed submission test:\n"
         detail += "\n".join(f"• {f}" for f in forms_failed)
+        if forms_infra_errors:
+            detail += f"\n\nBrowser errors ({len(forms_infra_errors)} form(s) — test manually):\n"
+            detail += "\n".join(f"• {f}" for f in forms_infra_errors)
         if skip_detail:
             detail += f"\n\n{skip_detail}"
         results.append(CheckResult(
@@ -1656,7 +1706,10 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
             points_lost=rule["weight"],
         ))
     else:
-        detail = f"All {total_tested} form(s) successfully redirect to thank-you/success pages"
+        detail = f"All {forms_passed} form(s) successfully redirect to thank-you/success pages"
+        if forms_infra_errors:
+            detail += f"\n\nBrowser errors ({len(forms_infra_errors)} form(s) — test manually):\n"
+            detail += "\n".join(f"• {f}" for f in forms_infra_errors)
         if skip_detail:
             detail += f"\n\n{skip_detail}"
         results.append(CheckResult(
@@ -3353,8 +3406,9 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
     Uses Playwright to find JS-rendered maps.
     """
     # Find pages with contact info or maps
+    # Negative lookbehind prevents matching digits from phone numbers (e.g. 574-936-6010)
     address_pattern = re.compile(
-        r'\d+\s+[\w\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Plaza|Plz)[\s,]+[\w\s]+,?\s*[A-Z]{2}\s+\d{5}',
+        r'(?<![-\d])\d+\s+[\w\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Plaza|Plz)[\s,]+[\w\s]+,?\s*[A-Z]{2}\s+\d{5}',
         re.IGNORECASE
     )
 
