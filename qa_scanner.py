@@ -1564,22 +1564,18 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 forms_skipped_complex.append(f"{short_url} ({form_info.get('required_count', '?')} required fields)")
                 continue
 
-            # Fresh browser for each form to prevent memory buildup (OOM on 512MB)
-            _FORM_TIMEOUTS = [30000, 45000, 60000]
-            cleanup_shared_browser()
+            # Reuse shared browser, just create fresh contexts per form
             for _attempt in range(3):  # Up to 3 attempts per form
                 try:
-                    if _attempt > 0:
-                        gc.collect()
-                        time.sleep(1)
-                    browser = _get_shared_browser()
-                    if not browser:
+                    if _attempt == 0:
+                        browser = _get_shared_browser()
+                    else:
                         browser = _recover_browser()
                     if not browser:
                         continue  # Try again
                     context = browser.new_context(user_agent=USER_AGENT)
                     pw_page = context.new_page()
-                    pw_page.goto(url, timeout=_FORM_TIMEOUTS[_attempt], wait_until="networkidle")
+                    pw_page.goto(url, timeout=60000, wait_until="networkidle")
 
                     # Fill form fields with test data
                     test_data = {
@@ -3388,33 +3384,24 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
     ]
 
     issues = []
-    _VIEWPORT_TIMEOUTS = [60000, 90000, 120000]  # Escalating timeouts per retry
 
     try:
-        # Get one browser for all viewports (avoids 3 cold starts)
-        cleanup_shared_browser()
-        gc.collect()
         browser = _get_shared_browser()
 
         for vp in viewports:
-            vp_success = False
             for _attempt in range(3):  # Up to 3 attempts per viewport
                 try:
                     if browser is None or _attempt > 0:
-                        # Recover browser with memory breathing room
-                        gc.collect()
-                        time.sleep(1)
                         browser = _recover_browser()
                     if not browser:
                         continue  # Try again
 
-                    timeout_ms = _VIEWPORT_TIMEOUTS[_attempt]
                     context = browser.new_context(
                         viewport={"width": vp["width"], "height": vp["height"]},
                         user_agent=USER_AGENT
                     )
                     page = context.new_page()
-                    page.goto(homepage_url, timeout=timeout_ms)
+                    page.goto(homepage_url, timeout=60000)
                     page.wait_for_load_state("networkidle", timeout=15000)
 
                     # Check for horizontal overflow (common responsive issue)
@@ -3797,15 +3784,12 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
     try:
         # Take screenshot (with retry on browser crash/timeout)
         screenshot = None
-        _VISUAL_TIMEOUTS = [30000, 60000, 90000]
         for _attempt in range(3):
             try:
-                if _attempt > 0:
-                    gc.collect()
-                    time.sleep(1)
-                    browser = _recover_browser()
-                else:
+                if _attempt == 0:
                     browser = _get_shared_browser()
+                else:
+                    browser = _recover_browser()
                 if not browser:
                     continue  # Try again
                 context = browser.new_context(
@@ -3813,7 +3797,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     user_agent=USER_AGENT
                 )
                 page = context.new_page()
-                page.goto(homepage_url, timeout=_VISUAL_TIMEOUTS[_attempt])
+                page.goto(homepage_url, timeout=60000)
                 page.wait_for_load_state("networkidle", timeout=15000)
 
                 # Take full page screenshot

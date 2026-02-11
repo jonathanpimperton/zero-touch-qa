@@ -210,15 +210,17 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         page_data.html = ""
     gc.collect()
 
-    # 2. Run Playwright checks sequentially (one browser at a time).
-    # Close and reopen browser between checks to prevent memory buildup
-    # from accumulated page navigations in Chromium's renderer.
+    # 2. Run Playwright checks sequentially, sharing one browser.
+    # Launch once, reuse across all checks, only clean up at the end.
+    # Individual checks create/close contexts but keep the browser alive.
+    if sequential_rules:
+        from qa_scanner import _get_shared_browser
+        _get_shared_browser()  # Warm up browser once before all checks
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()
         progress("browser", f"Browser check {i}/{len(sequential_rules)}: {short_name}...")
         all_results.extend(run_check(rule))
-        cleanup_shared_browser()  # Free Chromium memory between checks
 
     for rule in human_rules:
         all_results.append(CheckResult(
