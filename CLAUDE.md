@@ -42,7 +42,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Embeds PetDesk logo. |
+| `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Orchestrates scan memory lifecycle: parallel checks → pre-extract → free soups → sequential browser checks with restarts. Includes `psutil` memory instrumentation. |
 | `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
 | `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API, LanguageTool API (grammar/spelling), and Gemini Vision API (AI image analysis). Checks include broken links, broken images, Open Graph tags, mixed content, AI-powered photo analysis, partner-specific validations, and more. |
@@ -243,6 +243,40 @@ When a fetched page has very little visible body text (under 200 chars) despite 
 - Set `PLAYWRIGHT_ALWAYS=1` in `.env` to force Playwright for all pages (useful for debugging)
 - Docker deployment includes Chromium automatically
 
+## Memory Management (512MB Render Free Tier)
+
+The app runs on Render.com's free tier with a 512MB container limit. A full scan uses Python (~200MB) plus Chromium (~247MB in `--single-process` mode), leaving very little headroom. The scan engine uses several strategies to stay within budget:
+
+### Page data lifecycle
+1. **Crawl** — `SiteCrawler` fetches up to 30 pages, each stored as a `PageData` with `.html` (raw HTML string) and `.soup` (parsed BeautifulSoup tree, ~2MB each = ~60MB total for 30 pages)
+2. **Parallel checks** — fast non-browser checks (broken links, grammar, alt text, etc.) run in parallel using the soup data
+3. **Pre-extraction** — before launching Chromium, `pre_extract_page_data()` extracts form metadata (field names, types, captcha flags) and map data (iframe srcs, page text) into plain Python dicts
+4. **Free ALL soups** — every `page.soup` and `page.html` is set to `None`, then `gc.collect()` reclaims ~60MB
+5. **Sequential browser checks** — form submission, visual consistency, responsive viewports, and map location run one at a time with browser restarts between each
+
+### Browser memory strategy
+- **`--single-process`** mode keeps Chromium at 247MB baseline (vs 300MB+ in multi-process)
+- **Trade-off**: `--single-process` doesn't free page memory when browser contexts close — each navigation adds memory permanently
+- **Solution**: restart Chromium before EVERY sequential check (`cleanup_shared_browser()` + `_get_shared_browser()`) to reset memory
+- **With `domcontentloaded`** wait strategy (not `networkidle`), each restart cycle takes ~5 seconds
+
+### Why `domcontentloaded` not `networkidle`
+WordPress/Divi sites load analytics scripts (Google Analytics, Facebook Pixel, HotJar) that fire continuously and never go idle. Using `wait_until="networkidle"` caused every Playwright operation to timeout at 30-60 seconds. `domcontentloaded` fires in 2-3 seconds when the DOM is ready, plus a short `wait_for_timeout()` settle time for images/styles.
+
+### Memory instrumentation
+`app.py` includes `_mem_mb(label)` using `psutil` to log Python RSS + all child process memory (Chromium). Logs appear as `[MEM]` lines in Render logs. `PYTHONUNBUFFERED=1` in Dockerfile ensures logs flush immediately.
+
+### Typical memory profile
+| Phase | Python | Chromium | Total |
+|-------|--------|----------|-------|
+| Scan start | 110MB | — | 110MB |
+| After crawl (30 pages) | 165MB | — | 165MB |
+| After parallel checks | 200MB | — | 200MB |
+| After freeing soups | 145MB | — | 145MB |
+| Browser launch | 145MB | 247MB | 392MB |
+| During check (peak) | 145MB | ~360MB | ~505MB |
+| After restart | 145MB | — | 145MB |
+
 ## QA Rules Management
 
 Rules are stored in `rules.json` (not hardcoded in Python). The QA team manages rules entirely through the web app:
@@ -344,16 +378,17 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 ## Scan Flow
 
 1. `get_rules_for_scan(partner, phase)` loads applicable rules from `rules.json`
-2. `SiteCrawler.crawl()` fetches and parses up to 30 pages
-3. For each automated rule, the mapped check function runs against all crawled pages
-4. PageSpeed Insights API is called once for the homepage (if PSI_API_KEY is set) for rendered-page checks; otherwise flagged for human review
-5. LanguageTool API is called for grammar/spelling on up to 10 pages (checked in parallel). Spelling = FAIL (deduplicated by word, medical terms filtered by pattern), Grammar = WARN (deduplicated by message)
-6. Broken images, Open Graph tags, and mixed content are checked across all pages
-7. Broken links: 404/500 = FAIL, 403 (bot-blocked) = WARN
-8. Every error includes the exact page URL where it was found
-9. Results are collected, scored (100 - weighted failures), and formatted
-10. Scan saved to PostgreSQL (primary) and filesystem (fallback)
-11. Human review checklist allows Pass/Fail/N/A with comments; score updates in real-time (PASS/N/A restores pending penalty, FAIL increases it). Decisions persist to database via `/api/review`
+2. `SiteCrawler.crawl()` fetches and parses up to 30 pages (uses `requests`, with Playwright fallback for JS-rendered pages)
+3. **Parallel phase**: Non-browser checks run in parallel (ThreadPoolExecutor, 4 workers) — broken links, grammar, alt text, images, Open Graph, mixed content, etc.
+4. **Pre-extraction**: Form metadata and map iframe data extracted from soups into plain dicts
+5. **Free memory**: All page soups and HTML freed (~60MB reclaimed) before launching Chromium
+6. **Sequential browser phase**: Form submission, map location, visual consistency, and responsive viewports run one at a time with browser restarts between each check
+7. PageSpeed Insights API called for homepage (if PSI_API_KEY is set); otherwise flagged for human review
+8. LanguageTool API called for grammar/spelling on up to 10 pages (4 concurrent API calls). Spelling = FAIL (deduplicated by word, medical terms filtered), Grammar = WARN
+9. Every error includes the exact page URL where it was found
+10. Scoring: 100 - sum(weight) for FAIL, warnings at 50% weight, pending human reviews at 30% weight
+11. Scan saved to PostgreSQL (primary) and filesystem (fallback)
+12. Human review checklist allows Pass/Fail/N/A with comments; FAIL decisions lower the score in real-time. Decisions persist to database via `/api/review`
 
 ## Report Layout
 
@@ -376,10 +411,11 @@ No SKIP status exists in the report. Checks that can't run automatically are fla
 
 The scoring system ensures honest assessments:
 
-- **Score calculation**: 100 - sum(weight) for each FAIL - sum(weight * 0.3) for each pending human review item. Warnings don't lose points.
+- **Score calculation**: 100 - sum(weight) for each FAIL - sum(weight * 0.5) for each WARN - sum(weight * 0.3) for each pending human review item.
+- **Penalty weights**: FAIL = 100% of rule weight, WARN = 50%, pending HUMAN_REVIEW = 30%.
 - **Human review penalty**: Unreviewed items carry a 30% pending penalty (honest scoring — the score assumes partial failure until a human confirms). PASS/N/A restores the penalty; FAIL increases it to 100%.
 - **Weights**: 1 (minor) to 5 (critical). Total possible penalty: 83 points from automated checks.
-- **"Ready for Delivery" requires**: Score 95+ AND zero failures AND all human review items completed. Any failure or unfinished review blocks this status.
+- **"Ready for Delivery" requires**: Score 95+ AND zero failures. Any failure blocks this status.
 - **Critical failures (weight 5)**: Broken links, social links in wrong place, meta titles/descriptions missing. These show "Critical Issues - Fix Before Delivery" even with high scores.
 
 | Score | Failures | Color | Assessment |

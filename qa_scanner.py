@@ -1648,6 +1648,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 continue
 
             # Reuse shared browser, just create fresh contexts per form
+            context = None
             for _attempt in range(3):  # Up to 3 attempts per form
                 try:
                     if _attempt == 0:
@@ -1732,7 +1733,6 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 
                     if not submit_btn:
                         forms_failed.append(f"{url} - No submit button found")
-                        context.close()
                         break  # Exit retry loop — this is a real failure, not infra
 
                     # Submit and wait for navigation or AJAX response
@@ -1748,27 +1748,31 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                     # Check result
                     new_url = pw_page.url.lower()
                     page_content = pw_page.content().lower()
+                    # Release page content reference immediately
+                    page_content_copy = page_content
+                    page_content = None
 
                     # Success indicators
                     success_indicators = [
                         "thank" in new_url,
                         "success" in new_url,
                         "confirmation" in new_url,
-                        "thank you" in page_content,
-                        "thanks for" in page_content,
-                        "message sent" in page_content,
-                        "we'll be in touch" in page_content,
-                        "received your" in page_content,
-                        "submission successful" in page_content,
+                        "thank you" in page_content_copy,
+                        "thanks for" in page_content_copy,
+                        "message sent" in page_content_copy,
+                        "we'll be in touch" in page_content_copy,
+                        "received your" in page_content_copy,
+                        "submission successful" in page_content_copy,
                     ]
 
                     # Error indicators
                     error_indicators = [
-                        "error" in page_content and "required" in page_content,
-                        "please fill" in page_content,
-                        "invalid" in page_content,
-                        "failed" in page_content,
+                        "error" in page_content_copy and "required" in page_content_copy,
+                        "please fill" in page_content_copy,
+                        "invalid" in page_content_copy,
+                        "failed" in page_content_copy,
                     ]
+                    page_content_copy = None  # Free HTML string
 
                     if any(success_indicators) and not any(error_indicators):
                         forms_passed += 1
@@ -1776,15 +1780,10 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                         short_url = url.split("//")[-1] if "//" in url else url
                         forms_failed.append(f"{short_url} - No success page/message after submission")
 
-                    context.close()
                     break  # Success — exit retry loop
 
                 except Exception as e:
                     print(f"  [Forms] Attempt {_attempt+1}/3 failed on {short_url}: {str(e)[:60]}")
-                    try:
-                        context.close()
-                    except Exception:
-                        pass
                     if _attempt < 2 and _is_browser_infra_error(e):
                         # Browser crashed/timed out — recover and retry
                         browser = _recover_browser()
@@ -1797,6 +1796,13 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                         else:
                             forms_failed.append(f"{short_url} - Error: {err_str[:50]}")
                         break
+                finally:
+                    if context:
+                        try:
+                            context.close()
+                        except Exception:
+                            pass
+                        context = None
 
     except Exception as e:
         return [CheckResult(
@@ -3476,63 +3482,69 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
 
     issues = []
 
-    try:
-        browser = _get_shared_browser()
+    for vp in viewports:
+        # Restart browser between viewports to prevent memory accumulation
+        # (--single-process Chromium doesn't free page memory on context.close)
+        cleanup_shared_browser()
+        gc.collect()
 
-        for vp in viewports:
-            for _attempt in range(3):  # Up to 3 attempts per viewport
-                try:
-                    if browser is None or _attempt > 0:
-                        browser = _recover_browser()
-                    if not browser:
-                        continue  # Try again
+        context = None
+        for _attempt in range(3):  # Up to 3 attempts per viewport
+            try:
+                if _attempt == 0:
+                    browser = _get_shared_browser()
+                else:
+                    browser = _recover_browser()
+                if not browser:
+                    continue  # Try again
 
-                    context = browser.new_context(
-                        viewport={"width": vp["width"], "height": vp["height"]},
-                        user_agent=USER_AGENT
-                    )
-                    page = context.new_page()
-                    page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
-                    page.wait_for_timeout(2000)  # Brief settle time for layout
+                context = browser.new_context(
+                    viewport={"width": vp["width"], "height": vp["height"]},
+                    user_agent=USER_AGENT
+                )
+                page = context.new_page()
+                # Block images, media, fonts, and analytics to save memory.
+                # Responsive checks only need DOM + CSS for layout validation.
+                page.route("**/*", lambda route: route.abort()
+                    if route.request.resource_type in ("image", "media", "font")
+                    else route.continue_())
+                page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
+                page.wait_for_timeout(2000)  # Brief settle time for layout
 
-                    # Check for horizontal overflow (common responsive issue)
-                    has_overflow = page.evaluate("""
-                        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-                    """)
+                # Check for horizontal overflow (common responsive issue)
+                has_overflow = page.evaluate("""
+                    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+                """)
 
-                    if has_overflow:
-                        issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
+                if has_overflow:
+                    issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
 
-                    # Check if main content is visible
-                    main_visible = page.evaluate("""
-                        () => {
-                            const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
-                            if (!main) return true;  // No main element to check
-                            const rect = main.getBoundingClientRect();
-                            return rect.width > 0 && rect.height > 0;
-                        }
-                    """)
+                # Check if main content is visible
+                main_visible = page.evaluate("""
+                    () => {
+                        const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
+                        if (!main) return true;  // No main element to check
+                        const rect = main.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    }
+                """)
 
-                    if not main_visible:
-                        issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
+                if not main_visible:
+                    issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
 
-                    context.close()
-                    vp_success = True
-                    break  # Success — exit retry loop
+                break  # Success — exit retry loop
 
-                except Exception as e:
-                    print(f"  [Responsive] Attempt {_attempt+1}/3 failed on {vp['name']}: {str(e)[:60]}")
+            except Exception as e:
+                print(f"  [Responsive] Attempt {_attempt+1}/3 failed on {vp['name']}: {str(e)[:60]}")
+                if _attempt >= 2:
+                    issues.append(f"{vp['name']}: Failed after 3 attempts - {str(e)[:50]}")
+            finally:
+                if context:
                     try:
                         context.close()
                     except Exception:
                         pass
-                    if _attempt < 2:
-                        continue  # Retry with fresh browser
-                    else:
-                        issues.append(f"{vp['name']}: Failed after 3 attempts - {str(e)[:50]}")
-
-    except Exception as e:
-        issues.append(f"Responsive test error: {str(e)[:100]}")
+                    context = None
 
     if issues:
         return [CheckResult(
@@ -3614,19 +3626,19 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
             browser = _get_shared_browser()
             if browser:
                 for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
+                    pw_page = None
                     try:
                         pw_page = browser.new_page()
                         pw_page.goto(contact_url, timeout=30000, wait_until="domcontentloaded")
                         pw_page.wait_for_timeout(3000)  # Let JS-rendered maps load
                         html = pw_page.content()
-                        pw_page.close()
 
                         # Look for Google Maps embed URL in rendered HTML
                         map_url_matches = re.findall(r'google\.com/maps/embed\?pb=[^"\'>\s]+', html)
+                        html = None  # Free HTML string
                         for src in map_url_matches:
                             coord_match = re.search(r'!2d(-?\d+\.?\d*)!3d(-?\d+\.?\d*)', src)
                             if coord_match:
-                                # !2d is longitude, !3d is latitude
                                 map_coords = (float(coord_match.group(2)), float(coord_match.group(1)))
                                 map_page_url = contact_url
                                 break
@@ -3634,6 +3646,12 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
                             break
                     except Exception:
                         continue
+                    finally:
+                        if pw_page:
+                            try:
+                                pw_page.close()
+                            except Exception:
+                                pass
 
     if not map_coords:
         # No map on the site - nothing to check
@@ -3886,6 +3904,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
     try:
         # Take screenshot (with retry on browser crash/timeout)
         screenshot = None
+        context = None
         for _attempt in range(3):
             try:
                 if _attempt == 0:
@@ -3904,18 +3923,18 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
 
                 # Take above-fold screenshot (smaller viewport = faster render)
                 screenshot = page.screenshot(full_page=False, timeout=60000)
-                context.close()
                 break  # Success
             except Exception as e:
                 print(f"  [Visual] Attempt {_attempt+1}/3 failed: {str(e)[:60]}")
-                try:
-                    context.close()
-                except Exception:
-                    pass
-                if _attempt < 2:
-                    continue  # Retry with fresh browser
-                else:
+                if _attempt >= 2:
                     raise  # Will be caught by outer except
+            finally:
+                if context:
+                    try:
+                        context.close()
+                    except Exception:
+                        pass
+                    context = None
         if not screenshot:
             raise RuntimeError("Failed to capture screenshot after 3 attempts")
 
