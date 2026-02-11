@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, Response
 
 from qa_rules import get_rules_for_scan, get_automatable_rules, get_human_review_rules, get_all_rules, get_partner_rule_map, _save_rules
-from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache, pre_extract_page_data, clear_pre_extracted_data, clear_ai_caches
+from qa_scanner import SiteCrawler, ScanReport, CheckResult, CHECK_FUNCTIONS, cleanup_shared_browser, clear_psi_cache, pre_extract_page_data, clear_pre_extracted_data, clear_ai_caches, _psi_failed_urls, run_psi_playwright_fallback
 from qa_report import generate_html_report, generate_wrike_comment, generate_json_report
 from wp_api import PetDeskQAPluginClient, WordPressAPIClient, WP_CHECK_FUNCTIONS
 from db import is_db_available, init_db, db_get_scan_id, db_save_scan, \
@@ -190,6 +190,8 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         "check_form_submission", "check_responsive_viewports",
         "check_map_location", "check_visual_consistency",
     }
+    # Checks that depend on PSI data (may need Playwright fallback)
+    PSI_CHECKS = {"check_mobile_responsive", "check_contrast", "check_lighthouse"}
 
     # Separate rules into parallel-safe and sequential
     parallel_rules = [r for r in auto_rules if r.get("check_fn") not in PLAYWRIGHT_CHECKS]
@@ -237,12 +239,35 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     gc.collect()
     _mem_mb(f"After freeing ALL page data ({len(pages)} soups freed)")
 
-    # 2. Run Playwright checks sequentially.
+    # 2a. If PSI API failed, run Playwright performance fallback FIRST
+    # (soups are freed, so Chromium has room). Then re-run PSI-dependent checks.
+    from qa_scanner import _get_shared_browser
+    if _psi_failed_urls:
+        progress("browser", "Running local performance check (PSI was unreachable)...")
+        cleanup_shared_browser()
+        gc.collect()
+        _mem_mb("Before PSI Playwright fallback")
+        _get_shared_browser()
+        for fail_url in list(_psi_failed_urls):
+            run_psi_playwright_fallback(fail_url)
+        cleanup_shared_browser()
+        gc.collect()
+        _mem_mb("After PSI Playwright fallback")
+
+        # Re-run PSI-dependent checks now that we have local data
+        psi_rules = [r for r in auto_rules if r.get("check_fn") in PSI_CHECKS]
+        if psi_rules:
+            # Remove placeholder results from the parallel phase
+            psi_rule_ids = {r["id"] for r in psi_rules}
+            all_results = [r for r in all_results if r.rule_id not in psi_rule_ids]
+            # Re-run with Playwright data now available in the cache
+            for rule in psi_rules:
+                all_results.extend(run_check(rule))
+
+    # 2b. Run Playwright checks sequentially.
     # --single-process Chromium doesn't free page memory on context.close(),
     # so restart browser after EVERY check that navigates pages.
     # With domcontentloaded, each restart cycle is fast (~5s total).
-    if sequential_rules:
-        from qa_scanner import _get_shared_browser
     for i, rule in enumerate(sequential_rules, 1):
         fn_name = rule.get("check_fn", "")
         short_name = fn_name.replace("check_", "").replace("_", " ").title()

@@ -243,8 +243,9 @@ def clear_pre_extracted_data():
 
 
 def clear_psi_cache():
-    """Clear the PSI results cache between scans."""
+    """Clear the PSI results cache and failed URLs between scans."""
     _psi_cache.clear()
+    _psi_failed_urls.clear()
 
 # PageSpeed Insights API (free with a Google Cloud API key)
 PSI_API_KEY = os.environ.get("PSI_API_KEY", "")
@@ -1959,44 +1960,313 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 _psi_cache: dict = {}  # Cache PSI results per URL to avoid duplicate calls
 
 
+_psi_failed_urls = set()  # URLs where PSI API failed — need Playwright fallback
+
+
+def _try_psi_api(url: str) -> dict | None:
+    """Try PSI API with intelligent retry. Returns data on success, None on failure.
+    Does NOT run Playwright fallback — that happens in the sequential browser phase."""
+    api_url = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+
+    # Retry strategies: first try mobile, then desktop on retries
+    retry_configs = [
+        {"strategy": "mobile", "category": ["performance", "accessibility"]},
+        {"strategy": "desktop", "category": ["performance", "accessibility"]},
+        {"strategy": "desktop", "category": ["performance"]},
+    ]
+    delays = [5, 15, 30]  # Backoff between retries
+
+    for attempt, config in enumerate(retry_configs):
+        params = {"url": url, "key": PSI_API_KEY, **config}
+        try:
+            resp = requests.get(api_url, params=params, timeout=90)
+            if resp.status_code == 200:
+                data = resp.json()
+                if attempt > 0:
+                    print(f"  [PSI] Succeeded on attempt {attempt+1} (strategy={config['strategy']})", flush=True)
+                return data
+            else:
+                body = ""
+                try:
+                    body = resp.text[:300]
+                except Exception:
+                    pass
+
+                # Check if retryable (Lighthouse load failure)
+                is_retryable = any(s in body for s in [
+                    "FAILED_DOCUMENT_REQUEST", "ERR_TIMED_OUT",
+                    "ERRORED_DOCUMENT_REQUEST", "DNS_FAILURE",
+                ])
+                if is_retryable and attempt < len(retry_configs) - 1:
+                    delay = delays[attempt] if attempt < len(delays) else 30
+                    print(f"  [PSI] Attempt {attempt+1} failed (Lighthouse load timeout), retrying in {delay}s with strategy={retry_configs[attempt+1]['strategy']}...", flush=True)
+                    import time as _time
+                    _time.sleep(delay)
+                    continue
+                elif not is_retryable:
+                    print(f"  [PSI] API returned {resp.status_code}: {body}", flush=True)
+                    break
+                else:
+                    print(f"  [PSI] All {len(retry_configs)} PSI attempts failed for {url}", flush=True)
+                    break
+        except Exception as e:
+            if attempt < len(retry_configs) - 1:
+                delay = delays[attempt] if attempt < len(delays) else 30
+                print(f"  [PSI] Attempt {attempt+1} error: {str(e)[:60]}, retrying in {delay}s...", flush=True)
+                import time as _time
+                _time.sleep(delay)
+                continue
+            break
+
+    return None
+
+
 def _get_psi_data(url: str) -> dict | None:
-    """Fetch PageSpeed Insights data for a URL. Returns None on failure."""
+    """Get performance data for a URL. Tries PSI API first, marks URL for
+    Playwright fallback if PSI fails. The fallback runs later in the
+    sequential browser phase (after soups are freed) to avoid OOM."""
     if url in _psi_cache:
         return _psi_cache[url]
 
-    api_url = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
-    params = {
-        "url": url,
-        "strategy": "mobile",
-        "category": ["performance", "accessibility"],
-    }
     if PSI_API_KEY:
-        params["key"] = PSI_API_KEY
-
-    if not PSI_API_KEY:
-        _psi_cache[url] = None
-        return None
-
-    try:
-        resp = requests.get(api_url, params=params, timeout=60)
-        if resp.status_code == 200:
-            data = resp.json()
+        data = _try_psi_api(url)
+        if data:
             _psi_cache[url] = data
             return data
-        else:
-            # Log response body for debugging (truncated)
-            body = ""
+        # PSI failed — mark for Playwright fallback in sequential phase
+        print(f"  [PSI] Marking {url} for Playwright fallback (will run in browser phase)", flush=True)
+        _psi_failed_urls.add(url)
+
+    _psi_cache[url] = None
+    return None
+
+
+def run_psi_playwright_fallback(url: str) -> dict | None:
+    """Run Playwright-based performance fallback for a URL where PSI failed.
+    Called from app.py during the sequential browser phase after soups are freed."""
+    print(f"  [PSI] Running Playwright performance fallback for {url}", flush=True)
+    data = _run_local_lighthouse(url)
+    if data:
+        _psi_cache[url] = data
+    return data
+
+
+def _run_local_lighthouse(url: str) -> dict | None:
+    """Gather Lighthouse-equivalent metrics using Playwright.
+    Returns data in PSI-compatible schema so check functions work unchanged.
+    Runs only for one page (homepage) to keep memory low.
+    """
+    if not PLAYWRIGHT_AVAILABLE:
+        return None
+
+    context = None
+    pw_page = None
+    try:
+        browser = _get_shared_browser()
+        if not browser:
+            return None
+
+        context = browser.new_context(
+            viewport={"width": 375, "height": 812},  # Mobile viewport
+            user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+        )
+        # Block heavy resources for faster load
+        context.route("**/*.{png,jpg,jpeg,gif,webp,svg,mp4,webm,woff,woff2,ttf}", lambda route: route.abort())
+
+        pw_page = context.new_page()
+
+        # Navigate and measure load time
+        start_time = pw_page.evaluate("() => performance.now()")
+        pw_page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        pw_page.wait_for_timeout(3000)  # Let layout settle
+
+        # Gather performance metrics via JS
+        metrics = pw_page.evaluate("""() => {
+            const result = {};
+
+            // Navigation timing
+            const nav = performance.getEntriesByType('navigation')[0];
+            if (nav) {
+                result.loadTime = nav.loadEventEnd - nav.startTime;
+                result.domContentLoaded = nav.domContentLoadedEventEnd - nav.startTime;
+                result.ttfb = nav.responseStart - nav.startTime;
+            }
+
+            // LCP from PerformanceObserver (already fired entries)
+            const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
+            if (lcpEntries.length > 0) {
+                result.lcp = lcpEntries[lcpEntries.length - 1].startTime;
+            }
+
+            // CLS from layout-shift entries
+            const layoutShifts = performance.getEntriesByType('layout-shift');
+            let clsValue = 0;
+            for (const entry of layoutShifts) {
+                if (!entry.hadRecentInput) {
+                    clsValue += entry.value;
+                }
+            }
+            result.cls = clsValue;
+
+            // Viewport meta tag
+            const viewport = document.querySelector('meta[name="viewport"]');
+            result.hasViewport = !!viewport;
+            result.viewportContent = viewport ? viewport.getAttribute('content') : '';
+
+            // Check tap target sizes (interactive elements)
+            const interactive = document.querySelectorAll('a, button, input, select, textarea, [role="button"]');
+            let tooSmall = 0;
+            let total = 0;
+            for (const el of interactive) {
+                const rect = el.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    total++;
+                    if (rect.width < 48 || rect.height < 48) {
+                        tooSmall++;
+                    }
+                }
+            }
+            result.tapTargetsTotal = total;
+            result.tapTargetsTooSmall = tooSmall;
+
+            // Check font sizes
+            const textElements = document.querySelectorAll('p, span, li, td, th, label, a');
+            let smallFonts = 0;
+            let totalText = 0;
+            for (const el of Array.from(textElements).slice(0, 100)) {
+                const style = window.getComputedStyle(el);
+                const fontSize = parseFloat(style.fontSize);
+                if (fontSize > 0) {
+                    totalText++;
+                    if (fontSize < 12) {
+                        smallFonts++;
+                    }
+                }
+            }
+            result.fontSizeTotal = totalText;
+            result.fontSizeTooSmall = smallFonts;
+
+            // Color contrast check (sample text elements)
+            let contrastIssues = 0;
+            let contrastChecked = 0;
+            for (const el of Array.from(textElements).slice(0, 50)) {
+                const style = window.getComputedStyle(el);
+                const color = style.color;
+                const bgColor = style.backgroundColor;
+                if (color && bgColor && bgColor !== 'rgba(0, 0, 0, 0)') {
+                    contrastChecked++;
+                    // Parse RGB values
+                    const fg = color.match(/\\d+/g);
+                    const bg = bgColor.match(/\\d+/g);
+                    if (fg && bg && fg.length >= 3 && bg.length >= 3) {
+                        // Simplified luminance check
+                        const fgLum = (0.299 * fg[0] + 0.587 * fg[1] + 0.114 * fg[2]) / 255;
+                        const bgLum = (0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]) / 255;
+                        const ratio = (Math.max(fgLum, bgLum) + 0.05) / (Math.min(fgLum, bgLum) + 0.05);
+                        if (ratio < 4.5) {
+                            contrastIssues++;
+                        }
+                    }
+                }
+            }
+            result.contrastChecked = contrastChecked;
+            result.contrastIssues = contrastIssues;
+
+            return result;
+        }""")
+
+        # Build PSI-compatible response schema
+        perf_score = 1.0  # Start optimistic
+        if metrics.get("lcp") and metrics["lcp"] > 4000:
+            perf_score = 0.4  # Poor LCP
+        elif metrics.get("lcp") and metrics["lcp"] > 2500:
+            perf_score = 0.7  # Needs improvement
+        if metrics.get("cls", 0) > 0.25:
+            perf_score = min(perf_score, 0.4)
+        elif metrics.get("cls", 0) > 0.1:
+            perf_score = min(perf_score, 0.7)
+
+        # Accessibility score based on contrast + tap targets
+        access_score = 1.0
+        if metrics.get("contrastChecked", 0) > 0:
+            contrast_ratio = metrics.get("contrastIssues", 0) / metrics["contrastChecked"]
+            if contrast_ratio > 0.3:
+                access_score = 0.5
+            elif contrast_ratio > 0.1:
+                access_score = 0.8
+
+        # Tap targets
+        tap_score = 1.0
+        tap_display = ""
+        if metrics.get("tapTargetsTotal", 0) > 0:
+            tap_pct = metrics["tapTargetsTooSmall"] / metrics["tapTargetsTotal"]
+            if tap_pct > 0.3:
+                tap_score = 0
+                tap_display = f"{int(tap_pct * 100)}% of tap targets too small"
+            elif tap_pct > 0.1:
+                tap_score = 0.5
+                tap_display = f"{int(tap_pct * 100)}% of tap targets too small"
+
+        # Font size
+        font_score = 1.0
+        font_display = ""
+        if metrics.get("fontSizeTotal", 0) > 0:
+            font_pct = metrics["fontSizeTooSmall"] / metrics["fontSizeTotal"]
+            if font_pct > 0.2:
+                font_score = 0
+                font_display = f"{int(font_pct * 100)}% of text too small"
+            elif font_pct > 0.05:
+                font_score = 0.5
+                font_display = f"{int(font_pct * 100)}% of text too small"
+
+        # Contrast
+        contrast_score = 1.0
+        contrast_display = ""
+        if metrics.get("contrastChecked", 0) > 0 and metrics.get("contrastIssues", 0) > 0:
+            contrast_score = 0
+            contrast_display = f"{metrics['contrastIssues']} element(s) have insufficient contrast"
+
+        # CLS and LCP display values
+        cls_display = f"{metrics.get('cls', 0):.3f}" if "cls" in metrics else ""
+        lcp_ms = metrics.get("lcp", 0)
+        lcp_display = f"{lcp_ms / 1000:.1f} s" if lcp_ms else ""
+
+        data = {
+            "_source": "local_playwright",
+            "lighthouseResult": {
+                "categories": {
+                    "performance": {"score": perf_score},
+                    "accessibility": {"score": access_score},
+                },
+                "audits": {
+                    "viewport": {"score": 1 if metrics.get("hasViewport") else 0},
+                    "tap-targets": {"score": tap_score, "displayValue": tap_display},
+                    "font-size": {"score": font_score, "displayValue": font_display},
+                    "color-contrast": {"score": contrast_score, "displayValue": contrast_display},
+                    "cumulative-layout-shift": {"displayValue": cls_display, "numericValue": metrics.get("cls", 0)},
+                    "largest-contentful-paint": {"displayValue": lcp_display, "numericValue": lcp_ms},
+                },
+            },
+        }
+
+        source_label = "Local Playwright" if not PSI_API_KEY else "Local Playwright (PSI fallback)"
+        print(f"  [PSI] {source_label}: perf={perf_score:.1f}, access={access_score:.1f}, LCP={lcp_display}, CLS={cls_display}", flush=True)
+        return data
+
+    except Exception as e:
+        print(f"  [PSI] Local Playwright fallback failed: {str(e)[:80]}", flush=True)
+        return None
+    finally:
+        if pw_page:
             try:
-                body = resp.text[:500]
+                pw_page.close()
             except Exception:
                 pass
-            print(f"  [PSI] API returned {resp.status_code} for {url}: {body}", flush=True)
-            _psi_cache[url] = None
-            return None
-    except Exception as e:
-        print(f"  [PSI] Error fetching {url}: {e}", flush=True)
-        _psi_cache[url] = None
-        return None
+        if context:
+            try:
+                context.close()
+            except Exception:
+                pass
 
 
 def _get_psi_audit(data: dict, audit_key: str) -> dict:
@@ -2015,15 +2285,15 @@ def _get_psi_category_score(data: dict, category: str) -> float | None:
 
 
 def check_mobile_responsive(pages: dict, rule: dict) -> list[CheckResult]:
-    """Check mobile responsiveness using PSI rendered check + HTML fallback."""
+    """Check mobile responsiveness using PSI rendered check + Playwright fallback."""
     results = []
 
     # Get the homepage URL
     homepage_url = list(pages.keys())[0] if pages else ""
     psi = _get_psi_data(homepage_url) if homepage_url else None
+    source = "Local Playwright" if psi and psi.get("_source") == "local_playwright" else "PageSpeed Insights"
 
     if psi:
-        # Use real rendered data from PSI
         viewport = _get_psi_audit(psi, "viewport")
         tap_targets = _get_psi_audit(psi, "tap-targets")
         font_size = _get_psi_audit(psi, "font-size")
@@ -2032,25 +2302,29 @@ def check_mobile_responsive(pages: dict, rule: dict) -> list[CheckResult]:
         if viewport.get("score") == 0:
             issues.append("Viewport not configured for mobile")
         if tap_targets.get("score") is not None and tap_targets["score"] < 1:
-            issues.append(f"Tap targets too small: {tap_targets.get('displayValue', 'see report')}")
+            display = tap_targets.get("displayValue", "see report")
+            if display:
+                issues.append(f"Tap targets too small: {display}")
         if font_size.get("score") is not None and font_size["score"] < 1:
-            issues.append(f"Font sizes too small for mobile: {font_size.get('displayValue', 'see report')}")
+            display = font_size.get("displayValue", "see report")
+            if display:
+                issues.append(f"Font sizes too small for mobile: {display}")
 
         if issues:
             results.append(CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="FAIL", weight=rule["weight"],
-                details="PageSpeed Insights (rendered check): " + "; ".join(issues),
+                details=f"{source} (rendered check): " + "; ".join(issues),
                 points_lost=rule["weight"],
             ))
         else:
             results.append(CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details="PageSpeed Insights confirms mobile-friendly (viewport, tap targets, font sizes OK)",
+                details=f"{source} confirms mobile-friendly (viewport, tap targets, font sizes OK)",
             ))
     else:
-        # Fallback to HTML-only check
+        # Fallback to HTML-only check (no PSI key AND no Playwright)
         missing = []
         for url, page in pages.items():
             if page.soup and not page.soup.find("meta", attrs={"name": "viewport"}):
@@ -2059,14 +2333,14 @@ def check_mobile_responsive(pages: dict, rule: dict) -> list[CheckResult]:
             results.append(CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="FAIL", weight=rule["weight"],
-                details=f"Viewport meta tag missing on {len(missing)} page(s) (HTML check; add PSI_API_KEY for rendered check)",
+                details=f"Viewport meta tag missing on {len(missing)} page(s)",
                 points_lost=rule["weight"],
             ))
         else:
             results.append(CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details="Viewport meta tag present (HTML check; add PSI_API_KEY for full rendered check)",
+                details="Viewport meta tag present on all pages",
             ))
     return results
 
@@ -2099,9 +2373,10 @@ def check_featured_images(pages: dict, rule: dict) -> list[CheckResult]:
 
 
 def check_contrast(pages: dict, rule: dict) -> list[CheckResult]:
-    """Check color contrast using PSI accessibility audit."""
+    """Check color contrast using PSI accessibility audit or local Playwright fallback."""
     homepage_url = list(pages.keys())[0] if pages else ""
     psi = _get_psi_data(homepage_url) if homepage_url else None
+    source = "Local check" if psi and psi.get("_source") == "local_playwright" else "PageSpeed Insights"
 
     if psi:
         contrast = _get_psi_audit(psi, "color-contrast")
@@ -2110,30 +2385,88 @@ def check_contrast(pages: dict, rule: dict) -> list[CheckResult]:
                 return [CheckResult(
                     rule_id=rule["id"], category=rule["category"],
                     check=rule["check"], status="PASS", weight=rule["weight"],
-                    details="PageSpeed Insights confirms sufficient color contrast",
+                    details=f"{source} confirms sufficient color contrast",
                 )]
             else:
                 detail = contrast.get("displayValue", "Insufficient contrast")
                 return [CheckResult(
                     rule_id=rule["id"], category=rule["category"],
                     check=rule["check"], status="FAIL", weight=rule["weight"],
-                    details=f"PageSpeed Insights: {detail}",
+                    details=f"{source}: {detail}",
                     points_lost=rule["weight"],
                 )]
 
+    # No data yet — WARN pending Playwright fallback in browser phase
     return [CheckResult(
         rule_id=rule["id"], category=rule["category"],
-        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-        details="Contrast check requires PSI_API_KEY for automated check. Flagged for human review.",
+        check=rule["check"], status="WARN", weight=rule["weight"],
+        details="Contrast check pending — Playwright fallback will run in browser phase.",
     )]
 
 
 def check_lighthouse(pages: dict, rule: dict) -> list[CheckResult]:
-    """Check performance via PageSpeed Insights Lighthouse."""
+    """Check performance via PageSpeed Insights Lighthouse or local Playwright metrics."""
     homepage_url = list(pages.keys())[0] if pages else ""
     psi = _get_psi_data(homepage_url) if homepage_url else None
 
-    if psi:
+    if not psi:
+        # No data at all — WARN (never HUMAN_REVIEW). Will be replaced by
+        # Playwright fallback in the sequential browser phase if possible.
+        return [CheckResult(
+            rule_id=rule["id"], category=rule["category"],
+            check=rule["check"], status="WARN", weight=rule["weight"],
+            details="Performance metrics pending — Playwright fallback will run in browser phase.",
+        )]
+
+    is_local = psi.get("_source") == "local_playwright"
+    cls = _get_psi_audit(psi, "cumulative-layout-shift")
+    lcp = _get_psi_audit(psi, "largest-contentful-paint")
+
+    if is_local:
+        # Local Playwright: report raw metrics, NOT fake Lighthouse scores
+        lcp_ms = lcp.get("numericValue", 0)
+        cls_val = cls.get("numericValue", 0)
+
+        details_parts = []
+        if lcp.get("displayValue"):
+            details_parts.append(f"LCP: {lcp['displayValue']}")
+        if cls.get("displayValue"):
+            details_parts.append(f"CLS: {cls['displayValue']}")
+
+        # Only PASS if we have both metrics and both pass thresholds
+        if not details_parts:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
+                details="Local performance check: metrics incomplete",
+            )]
+
+        detail = " | ".join(details_parts)
+
+        # Core Web Vitals thresholds (conservative)
+        # LCP: ≤2.5s PASS, ≤4s WARN, >4s FAIL
+        # CLS: ≤0.1 PASS, ≤0.25 WARN, >0.25 FAIL
+        if lcp_ms > 4000 or cls_val > 0.25:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="FAIL", weight=rule["weight"],
+                details=f"Local performance check: {detail} — exceeds Core Web Vitals thresholds",
+                points_lost=rule["weight"],
+            )]
+        elif lcp_ms > 2500 or cls_val > 0.1:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="WARN", weight=rule["weight"],
+                details=f"Local performance check: {detail} — needs improvement per Core Web Vitals",
+            )]
+        else:
+            return [CheckResult(
+                rule_id=rule["id"], category=rule["category"],
+                check=rule["check"], status="PASS", weight=rule["weight"],
+                details=f"Local performance check: {detail} — meets Core Web Vitals thresholds",
+            )]
+    else:
+        # Real PSI Lighthouse data
         perf_score = _get_psi_category_score(psi, "performance")
         access_score = _get_psi_category_score(psi, "accessibility")
 
@@ -2142,12 +2475,8 @@ def check_lighthouse(pages: dict, rule: dict) -> list[CheckResult]:
             details_parts.append(f"Performance: {int(perf_score * 100)}/100")
         if access_score is not None:
             details_parts.append(f"Accessibility: {int(access_score * 100)}/100")
-
-        cls = _get_psi_audit(psi, "cumulative-layout-shift")
         if cls.get("displayValue"):
             details_parts.append(f"CLS: {cls['displayValue']}")
-
-        lcp = _get_psi_audit(psi, "largest-contentful-paint")
         if lcp.get("displayValue"):
             details_parts.append(f"LCP: {lcp['displayValue']}")
 
@@ -2165,13 +2494,6 @@ def check_lighthouse(pages: dict, rule: dict) -> list[CheckResult]:
                 check=rule["check"], status="PASS", weight=rule["weight"],
                 details=f"PageSpeed Insights: {detail}",
             )]
-
-    return [CheckResult(
-        rule_id=rule["id"], category=rule["category"],
-        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-        details="Verify page performance manually (load time, responsiveness). "
-                "Set PSI_API_KEY for automated scoring.",
-    )]
 
 
 # Partner-specific check implementations
@@ -4062,31 +4384,46 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
 
     try:
         # Take screenshot (with retry on browser crash/timeout)
+        # Use smaller viewport + block heavy resources + disable animations
         screenshot = None
         context = None
         pw_page = None
-        for _attempt in range(3):
+        print(f"  [Visual] Starting: url={homepage_url}, viewport=1024x768, full_page=False", flush=True)
+        for _attempt in range(2):  # Max 2 attempts (was 3)
             try:
                 if _attempt == 0:
                     browser = _get_shared_browser()
                 else:
-                    browser = _recover_browser()
+                    # Restart browser between retries to clear memory
+                    cleanup_shared_browser()
+                    gc.collect()
+                    browser = _get_shared_browser()
                 if not browser:
-                    continue  # Try again
+                    continue
                 context = browser.new_context(
-                    viewport={"width": 1280, "height": 720},
-                    user_agent=USER_AGENT
+                    viewport={"width": 1024, "height": 768},
+                    user_agent=USER_AGENT,
+                    reduced_motion="reduce",
                 )
+                # Block heavy resources — we only need DOM + CSS for visual check
+                context.route("**/*.{mp4,webm,ogg,wav,mp3,woff2,ttf,eot}", lambda route: route.abort())
                 pw_page = context.new_page()
-                pw_page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
-                pw_page.wait_for_timeout(3000)  # Let images/styles render for screenshot
+                # Inject CSS to disable animations before navigation
+                pw_page.add_init_script("""
+                    document.addEventListener('DOMContentLoaded', () => {
+                        const style = document.createElement('style');
+                        style.textContent = '*, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }';
+                        document.head.appendChild(style);
+                    });
+                """)
+                pw_page.goto(homepage_url, timeout=20000, wait_until="domcontentloaded")
+                pw_page.wait_for_timeout(2000)  # Brief settle for CSS layout
 
-                # Take above-fold screenshot (smaller viewport = faster render)
-                screenshot = pw_page.screenshot(full_page=False, timeout=60000)
+                screenshot = pw_page.screenshot(full_page=False, timeout=20000)
                 break  # Success
             except Exception as e:
-                print(f"  [Visual] Attempt {_attempt+1}/3 failed: {str(e)[:60]}")
-                if _attempt >= 2:
+                print(f"  [Visual] Attempt {_attempt+1}/2 failed: {str(e)[:60]}", flush=True)
+                if _attempt >= 1:
                     raise  # Will be caught by outer except
             finally:
                 if pw_page:
@@ -4102,7 +4439,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                         pass
                     context = None
         if not screenshot:
-            raise RuntimeError("Failed to capture screenshot after 3 attempts")
+            raise RuntimeError("Failed to capture screenshot after 2 attempts")
 
         prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
 
