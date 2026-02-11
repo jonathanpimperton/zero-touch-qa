@@ -14,7 +14,7 @@ import time
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 import requests
 from bs4 import BeautifulSoup
@@ -338,6 +338,11 @@ class SiteCrawler:
         self.domain = urllib.parse.urlparse(self.base_url).netloc
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": USER_AGENT})
+        # Connection pool: reuse TLS connections across requests (speed win)
+        from requests.adapters import HTTPAdapter
+        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10, pool_block=True)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         self.visited = set()
         self.pages: dict[str, PageData] = {}
         # Playwright (optional, for JS-rendered pages)
@@ -488,6 +493,32 @@ class SiteCrawler:
             self.pages[url] = page
             return page
 
+    def _is_crawlable(self, url: str) -> bool:
+        """Check if a URL should be crawled."""
+        parsed = urllib.parse.urlparse(url)
+        if parsed.netloc and parsed.netloc != self.domain:
+            return False
+        if any(url.lower().endswith(ext) for ext in
+               [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css",
+                ".js", ".zip", ".mp4", ".mp3", ".woff", ".woff2", ".ttf"]):
+            return False
+        skip_patterns = ["/wp-admin", "/wp-login", "/wp-json", "/feed", "/xmlrpc",
+                         "/wp-content/", "?replytocom=", "#"]
+        if any(p in url for p in skip_patterns):
+            return False
+        return True
+
+    def _collect_links(self, page: PageData) -> list[str]:
+        """Extract and normalize internal links from a page."""
+        new_links = []
+        for link in page.links:
+            link_parsed = urllib.parse.urlparse(link)
+            clean_link = f"{link_parsed.scheme}://{link_parsed.netloc}{link_parsed.path}"
+            clean_link = self._normalize_url(clean_link)
+            if link_parsed.netloc == self.domain and clean_link not in self.visited:
+                new_links.append(clean_link)
+        return new_links
+
     def crawl(self, max_pages: int = MAX_PAGES_TO_CRAWL) -> dict[str, PageData]:
         """Crawl the site starting from base_url, following internal links."""
         queue = [self.base_url]
@@ -496,38 +527,18 @@ class SiteCrawler:
         try:
             while queue and crawled < max_pages:
                 url = queue.pop(0)
+                normalized = self._normalize_url(url)
 
-                # Only follow internal links
-                parsed = urllib.parse.urlparse(url)
-                if parsed.netloc and parsed.netloc != self.domain:
+                if not self._is_crawlable(normalized) or normalized in self.visited:
                     continue
 
-                # Skip non-page resources
-                if any(url.lower().endswith(ext) for ext in
-                       [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".css",
-                        ".js", ".zip", ".mp4", ".mp3", ".woff", ".woff2", ".ttf"]):
-                    continue
-
-                # Skip WordPress admin, feeds, etc.
-                skip_patterns = ["/wp-admin", "/wp-login", "/wp-json", "/feed", "/xmlrpc",
-                                 "/wp-content/", "?replytocom=", "#"]
-                if any(p in url for p in skip_patterns):
-                    continue
-
-                page = self.fetch_page(url)
+                page = self.fetch_page(normalized)
                 if page and page.soup:
                     crawled += 1
-                    print(f"  [{crawled}/{max_pages}] {page.status_code} - {url}")
-
-                    # Add discovered internal links to queue
-                    for link in page.links:
-                        link_parsed = urllib.parse.urlparse(link)
-                        clean_link = f"{link_parsed.scheme}://{link_parsed.netloc}{link_parsed.path}"
-                        clean_link = self._normalize_url(clean_link)
-                        if (link_parsed.netloc == self.domain and
-                                clean_link not in self.visited and
-                                clean_link not in queue):
-                            queue.append(clean_link)
+                    print(f"  [{crawled}/{max_pages}] {page.status_code} - {normalized}")
+                    for link in self._collect_links(page):
+                        if link not in queue:
+                            queue.append(link)
         finally:
             self._cleanup_browser()
 
@@ -4150,6 +4161,9 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
 _gemini_client = None
 _anthropic_client = None
 _last_ai_call_time = 0  # For inter-call throttling
+_ai_throttle_delay = 0.3  # Adaptive: starts fast, backs off on 429
+_ai_success_streak = 0  # Reset throttle after N successes
+_ai_throttle_lock = Lock()  # Thread-safe access to throttle state
 _image_fetch_cache = {}  # URL -> image bytes (shared across AI checks within a scan)
 
 
@@ -4171,22 +4185,30 @@ def _fetch_image_cached(src: str) -> bytes | None:
 def clear_ai_caches():
     """Clear AI-related caches between scans."""
     global _gemini_client, _anthropic_client, _image_fetch_cache
+    global _ai_throttle_delay, _ai_success_streak
     _image_fetch_cache = {}
+    _ai_throttle_delay = 0.3
+    _ai_success_streak = 0
 
 
 def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3) -> str:
     """Helper to analyze an image using Gemini (primary) or Anthropic (fallback).
     Includes retry with exponential backoff for rate limit (429) errors
-    and inter-call throttling to stay under RPM limits.
+    and adaptive inter-call throttling (fast when allowed, backs off on 429).
+    Thread-safe: throttle state protected by _ai_throttle_lock.
     """
     import base64
     import time as _time
     global _gemini_client, _anthropic_client, _last_ai_call_time
+    global _ai_throttle_delay, _ai_success_streak
 
-    # Throttle: wait at least 1s between API calls to stay under RPM limits
-    elapsed = _time.time() - _last_ai_call_time
-    if elapsed < 1.0:
-        _time.sleep(1.0 - elapsed)
+    # Adaptive throttle: read state under lock, sleep outside, then re-lock to stamp
+    with _ai_throttle_lock:
+        sleep_for = max(0.0, _ai_throttle_delay - (_time.time() - _last_ai_call_time))
+    if sleep_for:
+        _time.sleep(sleep_for)
+    with _ai_throttle_lock:
+        _last_ai_call_time = _time.time()
 
     if AI_PROVIDER == "gemini":
         from google.genai import types
@@ -4196,7 +4218,6 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
 
         for attempt in range(max_retries):
             try:
-                _last_ai_call_time = _time.time()
                 response = _gemini_client.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=[
@@ -4204,14 +4225,26 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
                         prompt,
                     ]
                 )
+                # Success — gradually restore fast throttle
+                with _ai_throttle_lock:
+                    _ai_success_streak += 1
+                    if _ai_success_streak >= 10 and _ai_throttle_delay > 0.3:
+                        _ai_throttle_delay = max(_ai_throttle_delay / 2, 0.3)
+                        _ai_success_streak = 0
                 return response.text.strip()
             except Exception as e:
                 err_str = str(e).lower()
                 if "429" in err_str or "resource_exhausted" in err_str or "rate" in err_str:
+                    # Back off: increase throttle for remaining calls
+                    with _ai_throttle_lock:
+                        _ai_throttle_delay = min(_ai_throttle_delay * 2, 2.0)
+                        _ai_success_streak = 0
+                        new_throttle = _ai_throttle_delay
                     delay = (2 ** attempt) * 2  # 2s, 4s, 8s
-                    print(f"  [AI] Rate limited (attempt {attempt+1}/{max_retries}), waiting {delay}s...")
+                    print(f"  [AI] Rate limited (attempt {attempt+1}/{max_retries}), waiting {delay}s, throttle now {new_throttle:.1f}s...")
                     _time.sleep(delay)
-                    _last_ai_call_time = _time.time()
+                    with _ai_throttle_lock:
+                        _last_ai_call_time = _time.time()
                     if attempt == max_retries - 1:
                         print(f"  [AI] Rate limit exceeded after {max_retries} retries: {str(e)[:80]}")
                         return None
@@ -4224,7 +4257,6 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
             _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        _last_ai_call_time = _time.time()
         response = _anthropic_client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=300,
@@ -4407,8 +4439,9 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     user_agent=USER_AGENT,
                     reduced_motion="reduce",
                 )
-                # Block heavy resources by type — we only need DOM + CSS + images
-                context.route("**/*", lambda route: route.abort() if route.request.resource_type in ("media", "font") else route.continue_())
+                # Block only video/audio — keep images and fonts (Divi uses icon fonts
+                # like ETmodules; blocking fonts causes icons to render as "3" etc.)
+                context.route("**/*", lambda route: route.abort() if route.request.resource_type == "media" else route.continue_())
                 pw_page = context.new_page()
                 # Disable animations (add_init_script runs before page scripts)
                 pw_page.add_init_script("""
