@@ -185,11 +185,10 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
 
     all_results = []
 
-    # Playwright-based checks must run sequentially (one browser at a time)
+    # Only checks that actually use Playwright (browser) go here
     PLAYWRIGHT_CHECKS = {
-        "check_form_submission", "check_responsive_viewports", "check_map_location",
-        "check_visual_consistency", "check_image_appropriateness",
-        "check_branding_consistency", "check_image_cropping",
+        "check_form_submission", "check_responsive_viewports",
+        "check_map_location", "check_visual_consistency",
     }
 
     # Separate rules into parallel-safe and sequential
@@ -228,13 +227,29 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
             all_results.extend(future.result())
     _mem_mb("After parallel checks")
 
-    # Free raw HTML strings to reclaim memory before launching Chromium.
-    # Browser checks still need page.soup (BeautifulSoup) for form/map/image
-    # detection, but the raw HTML strings are redundant once parsed.
-    for page_data in pages.values():
-        page_data.html = ""
+    # Free as much page data as possible before launching Chromium (247MB).
+    # Browser checks use page.soup to find forms and maps. Keep only those soups.
+    _keep_urls = set()
+    for url, pd in pages.items():
+        if not pd.soup:
+            continue
+        # Keep pages with forms (check_form_submission scans these)
+        if pd.soup.find("form"):
+            _keep_urls.add(url)
+        # Keep pages with Google Maps iframes (check_map_location)
+        if any("google.com/maps" in (f.get("src", "") or "") for f in pd.soup.find_all("iframe")):
+            _keep_urls.add(url)
+        # Keep contact/about pages (map check uses Playwright + address extraction)
+        if any(x in url.lower() for x in ["contact", "location", "find-us", "about"]):
+            _keep_urls.add(url)
+    freed = 0
+    for url, pd in pages.items():
+        pd.html = ""
+        if url not in _keep_urls:
+            pd.soup = None
+            freed += 1
     gc.collect()
-    _mem_mb("After freeing HTML + gc")
+    _mem_mb(f"After freeing page data ({freed}/{len(pages)} soups freed)")
 
     # 2. Run Playwright checks sequentially, sharing a browser.
     # Restart once after form submission (heaviest check, loads complex JS pages)
