@@ -191,15 +191,32 @@ def pre_extract_page_data(pages):
             is_complex = required_count > 10
 
             if is_contact_form and (has_email or has_name):
+                # Score form priority: dedicated form pages first, sidebar widgets last
+                is_form_page = any(x in url.lower() for x in [
+                    "contact", "appointment", "request", "form", "inquiry",
+                    "schedule", "book", "reach-us", "get-in-touch"
+                ])
                 forms.append({
                     "url": url,
                     "inputs": inputs,
                     "has_captcha": has_captcha,
                     "is_complex": is_complex,
                     "required_count": required_count,
+                    "is_form_page": is_form_page,
                 })
 
-    _pre_extracted_forms = forms
+    # Deduplicate: keep only one form per page URL (the first/largest)
+    seen_urls = set()
+    deduped = []
+    for f in forms:
+        if f["url"] not in seen_urls:
+            seen_urls.add(f["url"])
+            deduped.append(f)
+
+    # Sort: dedicated form pages first, then by number of inputs (more = real form)
+    deduped.sort(key=lambda f: (not f["is_form_page"], -len(f["inputs"])))
+
+    _pre_extracted_forms = deduped
 
     # --- Extract map/address data for check_map_location ---
     map_data = {}
@@ -1632,7 +1649,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
         forms_skipped_captcha = []
         forms_skipped_complex = []
 
-        for form_info in forms_to_test[:3]:  # Test up to 3 forms
+        for form_idx, form_info in enumerate(forms_to_test[:3]):  # Test up to 3 forms
             url = form_info["url"]
             inputs = form_info["inputs"]
             short_url = url.split("//")[-1] if "//" in url else url
@@ -1647,7 +1664,12 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 forms_skipped_complex.append(f"{short_url} ({form_info.get('required_count', '?')} required fields)")
                 continue
 
-            # Reuse shared browser, just create fresh contexts per form
+            # Restart browser between forms to prevent memory accumulation
+            # (--single-process Chromium doesn't free page memory on context close)
+            if form_idx > 0:
+                cleanup_shared_browser()
+                gc.collect()
+
             context = None
             pw_page = None
             for _attempt in range(3):  # Up to 3 attempts per form
