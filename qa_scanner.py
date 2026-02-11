@@ -98,6 +98,39 @@ def cleanup_shared_browser():
         _shared_pw_instance = None
 
 
+_BROWSER_INFRA_KEYWORDS = [
+    "target page, context or browser",
+    "browser.new_context", "browsercontext.new_page",
+    "browser has been closed", "connection closed",
+    "target closed", "protocol error",
+]
+
+
+def _is_browser_infra_error(error: Exception) -> bool:
+    """Check if an exception is a browser infrastructure crash (not a real test failure)."""
+    err_lower = str(error).lower()
+    return any(kw in err_lower for kw in _BROWSER_INFRA_KEYWORDS)
+
+
+def _recover_browser():
+    """Force-kill the shared browser and launch a fresh one. Returns new browser or None."""
+    global _shared_pw_instance, _shared_pw_browser
+    # Force the globals to None so _get_shared_browser() relaunches
+    if _shared_pw_browser:
+        try:
+            _shared_pw_browser.close()
+        except Exception:
+            pass
+        _shared_pw_browser = None
+    if _shared_pw_instance:
+        try:
+            _shared_pw_instance.stop()
+        except Exception:
+            pass
+        _shared_pw_instance = None
+    return _get_shared_browser()
+
+
 def clear_psi_cache():
     """Clear the PSI results cache between scans."""
     _psi_cache.clear()
@@ -203,10 +236,13 @@ class SiteCrawler:
 
     @staticmethod
     def _normalize_url(url: str) -> str:
-        """Normalize URL by stripping trailing slash (except root path)."""
+        """Normalize URL by stripping trailing slash (except root path).
+        Also normalizes empty path to '/' so example.com and example.com/ are the same."""
         parsed = urllib.parse.urlparse(url)
         path = parsed.path
-        if path != "/" and path.endswith("/"):
+        if not path:
+            path = "/"
+        elif path != "/" and path.endswith("/"):
             path = path.rstrip("/")
         return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
@@ -1526,133 +1562,140 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                 forms_skipped_complex.append(f"{short_url} ({form_info.get('required_count', '?')} required fields)")
                 continue
 
-            try:
-                context = browser.new_context(user_agent=USER_AGENT)
-                pw_page = context.new_page()
-                pw_page.goto(url, timeout=15000, wait_until="networkidle")
-
-                # Fill form fields with test data
-                test_data = {
-                    "name": "QA Test User",
-                    "first_name": "QA Test",
-                    "last_name": "User",
-                    "email": "qa-test@petdesk-scanner.test",
-                    "phone": "555-000-0000",
-                    "message": "This is an automated QA test submission. Please ignore.",
-                    "comment": "Automated QA test - please ignore",
-                    "comments": "Automated QA test - please ignore",
-                }
-
-                for inp in inputs:
-                    inp_name = inp.get("name", "").lower()
-                    inp_type = inp.get("type", "text").lower()
-                    inp_tag = inp.name
-
-                    if inp_type in ("submit", "hidden", "button"):
-                        continue
-
-                    # Find matching test data
-                    value = None
-                    for key, val in test_data.items():
-                        if key in inp_name:
-                            value = val
-                            break
-
-                    if value:
-                        selector = f'[name="{inp.get("name")}"]'
-                        try:
-                            if inp_tag == "textarea":
-                                pw_page.fill(selector, value)
-                            elif inp_tag == "select":
-                                # Select first non-empty option
-                                pw_page.select_option(selector, index=1)
-                            elif inp_type == "checkbox":
-                                pw_page.check(selector)
-                            elif inp_type == "email":
-                                pw_page.fill(selector, test_data["email"])
-                            else:
-                                pw_page.fill(selector, value)
-                        except Exception:
-                            pass  # Field might not be visible/fillable
-
-                # Find and click submit button
-                submit_btn = None
-                for selector in [
-                    'button[type="submit"]',
-                    'input[type="submit"]',
-                    'button:has-text("Submit")',
-                    'button:has-text("Send")',
-                    'button:has-text("Request")',
-                    '.submit-button',
-                    '#submit',
-                ]:
-                    try:
-                        if pw_page.locator(selector).count() > 0:
-                            submit_btn = selector
-                            break
-                    except Exception:
-                        continue
-
-                if not submit_btn:
-                    forms_failed.append(f"{url} - No submit button found")
-                    context.close()
-                    continue
-
-                # Submit and wait for navigation or AJAX response
-                original_url = pw_page.url
+            for _attempt in range(2):  # Retry once on browser crash
                 try:
-                    pw_page.click(submit_btn)
-                    pw_page.wait_for_load_state("networkidle", timeout=10000)
-                    # Extra wait for AJAX responses to render
-                    pw_page.wait_for_timeout(2000)
-                except Exception:
-                    pass  # Some forms use AJAX, won't navigate
+                    context = browser.new_context(user_agent=USER_AGENT)
+                    pw_page = context.new_page()
+                    pw_page.goto(url, timeout=15000, wait_until="networkidle")
 
-                # Check result
-                new_url = pw_page.url.lower()
-                page_content = pw_page.content().lower()
+                    # Fill form fields with test data
+                    test_data = {
+                        "name": "QA Test User",
+                        "first_name": "QA Test",
+                        "last_name": "User",
+                        "email": "qa-test@petdesk-scanner.test",
+                        "phone": "555-000-0000",
+                        "message": "This is an automated QA test submission. Please ignore.",
+                        "comment": "Automated QA test - please ignore",
+                        "comments": "Automated QA test - please ignore",
+                    }
 
-                # Success indicators
-                success_indicators = [
-                    "thank" in new_url,
-                    "success" in new_url,
-                    "confirmation" in new_url,
-                    "thank you" in page_content,
-                    "thanks for" in page_content,
-                    "message sent" in page_content,
-                    "we'll be in touch" in page_content,
-                    "received your" in page_content,
-                    "submission successful" in page_content,
-                ]
+                    for inp in inputs:
+                        inp_name = inp.get("name", "").lower()
+                        inp_type = inp.get("type", "text").lower()
+                        inp_tag = inp.name
 
-                # Error indicators
-                error_indicators = [
-                    "error" in page_content and "required" in page_content,
-                    "please fill" in page_content,
-                    "invalid" in page_content,
-                    "failed" in page_content,
-                ]
+                        if inp_type in ("submit", "hidden", "button"):
+                            continue
 
-                if any(success_indicators) and not any(error_indicators):
-                    forms_passed += 1
-                else:
-                    short_url = url.split("//")[-1] if "//" in url else url
-                    forms_failed.append(f"{short_url} - No success page/message after submission")
+                        # Find matching test data
+                        value = None
+                        for key, val in test_data.items():
+                            if key in inp_name:
+                                value = val
+                                break
 
-                context.close()
+                        if value:
+                            selector = f'[name="{inp.get("name")}"]'
+                            try:
+                                if inp_tag == "textarea":
+                                    pw_page.fill(selector, value)
+                                elif inp_tag == "select":
+                                    # Select first non-empty option
+                                    pw_page.select_option(selector, index=1)
+                                elif inp_type == "checkbox":
+                                    pw_page.check(selector)
+                                elif inp_type == "email":
+                                    pw_page.fill(selector, test_data["email"])
+                                else:
+                                    pw_page.fill(selector, value)
+                            except Exception:
+                                pass  # Field might not be visible/fillable
 
-            except Exception as e:
-                short_url = url.split("//")[-1] if "//" in url else url
-                err_str = str(e)
-                # Distinguish browser infrastructure errors from real form failures
-                infra_keywords = ["Target page, context or browser",
-                                  "Browser.new_context", "BrowserContext.new_page",
-                                  "browser has been closed", "Connection closed",
-                                  "Target closed", "Protocol error"]
-                if any(kw.lower() in err_str.lower() for kw in infra_keywords):
-                    forms_infra_errors.append(f"{short_url} - Error: {err_str[:50]}")
-                else:
-                    forms_failed.append(f"{short_url} - Error: {err_str[:50]}")
+                    # Find and click submit button
+                    submit_btn = None
+                    for selector in [
+                        'button[type="submit"]',
+                        'input[type="submit"]',
+                        'button:has-text("Submit")',
+                        'button:has-text("Send")',
+                        'button:has-text("Request")',
+                        '.submit-button',
+                        '#submit',
+                    ]:
+                        try:
+                            if pw_page.locator(selector).count() > 0:
+                                submit_btn = selector
+                                break
+                        except Exception:
+                            continue
+
+                    if not submit_btn:
+                        forms_failed.append(f"{url} - No submit button found")
+                        context.close()
+                        break  # Exit retry loop — this is a real failure, not infra
+
+                    # Submit and wait for navigation or AJAX response
+                    original_url = pw_page.url
+                    try:
+                        pw_page.click(submit_btn)
+                        pw_page.wait_for_load_state("networkidle", timeout=10000)
+                        # Extra wait for AJAX responses to render
+                        pw_page.wait_for_timeout(2000)
+                    except Exception:
+                        pass  # Some forms use AJAX, won't navigate
+
+                    # Check result
+                    new_url = pw_page.url.lower()
+                    page_content = pw_page.content().lower()
+
+                    # Success indicators
+                    success_indicators = [
+                        "thank" in new_url,
+                        "success" in new_url,
+                        "confirmation" in new_url,
+                        "thank you" in page_content,
+                        "thanks for" in page_content,
+                        "message sent" in page_content,
+                        "we'll be in touch" in page_content,
+                        "received your" in page_content,
+                        "submission successful" in page_content,
+                    ]
+
+                    # Error indicators
+                    error_indicators = [
+                        "error" in page_content and "required" in page_content,
+                        "please fill" in page_content,
+                        "invalid" in page_content,
+                        "failed" in page_content,
+                    ]
+
+                    if any(success_indicators) and not any(error_indicators):
+                        forms_passed += 1
+                    else:
+                        short_url = url.split("//")[-1] if "//" in url else url
+                        forms_failed.append(f"{short_url} - No success page/message after submission")
+
+                    context.close()
+                    break  # Success — exit retry loop
+
+                except Exception as e:
+                    if _attempt == 0 and _is_browser_infra_error(e):
+                        # Browser crashed — recover and retry this form
+                        print(f"  [Forms] Browser crashed testing {short_url}, recovering...")
+                        browser = _recover_browser()
+                        if not browser:
+                            forms_infra_errors.append(f"{short_url} - Browser unrecoverable")
+                            break
+                        continue  # Retry with fresh browser
+                    else:
+                        # Second attempt failed, or non-infra error
+                        err_str = str(e)
+                        if _is_browser_infra_error(e):
+                            forms_infra_errors.append(f"{short_url} - Error: {err_str[:50]}")
+                        else:
+                            forms_failed.append(f"{short_url} - Error: {err_str[:50]}")
+                        break
 
     except Exception as e:
         return [CheckResult(
@@ -3342,40 +3385,51 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
             )]
 
         for vp in viewports:
-            try:
-                context = browser.new_context(
-                    viewport={"width": vp["width"], "height": vp["height"]},
-                    user_agent=USER_AGENT
-                )
-                page = context.new_page()
-                page.goto(homepage_url, timeout=30000)
-                page.wait_for_load_state("networkidle", timeout=15000)
+            for _attempt in range(2):  # Retry once on browser crash
+                try:
+                    context = browser.new_context(
+                        viewport={"width": vp["width"], "height": vp["height"]},
+                        user_agent=USER_AGENT
+                    )
+                    page = context.new_page()
+                    page.goto(homepage_url, timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=15000)
 
-                # Check for horizontal overflow (common responsive issue)
-                has_overflow = page.evaluate("""
-                    () => document.documentElement.scrollWidth > document.documentElement.clientWidth
-                """)
+                    # Check for horizontal overflow (common responsive issue)
+                    has_overflow = page.evaluate("""
+                        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+                    """)
 
-                if has_overflow:
-                    issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
+                    if has_overflow:
+                        issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
 
-                # Check if main content is visible
-                main_visible = page.evaluate("""
-                    () => {
-                        const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
-                        if (!main) return true;  // No main element to check
-                        const rect = main.getBoundingClientRect();
-                        return rect.width > 0 && rect.height > 0;
-                    }
-                """)
+                    # Check if main content is visible
+                    main_visible = page.evaluate("""
+                        () => {
+                            const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
+                            if (!main) return true;  // No main element to check
+                            const rect = main.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0;
+                        }
+                    """)
 
-                if not main_visible:
-                    issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
+                    if not main_visible:
+                        issues.append(f"{vp['name']} ({vp['width']}px): Main content not visible")
 
-                context.close()
+                    context.close()
+                    break  # Success — exit retry loop
 
-            except Exception as e:
-                issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
+                except Exception as e:
+                    if _attempt == 0 and _is_browser_infra_error(e):
+                        print(f"  [Responsive] Browser crashed on {vp['name']}, recovering...")
+                        browser = _recover_browser()
+                        if not browser:
+                            issues.append(f"{vp['name']}: Browser unrecoverable")
+                            break
+                        continue  # Retry with fresh browser
+                    else:
+                        issues.append(f"{vp['name']}: Error testing - {str(e)[:50]}")
+                        break
 
     except Exception as e:
         return [CheckResult(
@@ -3723,25 +3777,40 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         )]
 
     try:
-        # Take screenshot
-        browser = _get_shared_browser()
-        if not browser:
-            return [CheckResult(
-                rule_id=rule["id"], category=rule["category"],
-                check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
-                details="Could not launch browser for screenshots. Manual review needed.",
-            )]
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent=USER_AGENT
-        )
-        page = context.new_page()
-        page.goto(homepage_url, timeout=30000)
-        page.wait_for_load_state("networkidle", timeout=15000)
+        # Take screenshot (with retry on browser crash)
+        screenshot = None
+        for _attempt in range(2):
+            try:
+                browser = _get_shared_browser()
+                if not browser:
+                    return [CheckResult(
+                        rule_id=rule["id"], category=rule["category"],
+                        check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
+                        details="Could not launch browser for screenshots. Manual review needed.",
+                    )]
+                context = browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent=USER_AGENT
+                )
+                page = context.new_page()
+                page.goto(homepage_url, timeout=30000)
+                page.wait_for_load_state("networkidle", timeout=15000)
 
-        # Take full page screenshot
-        screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
-        context.close()
+                # Take full page screenshot
+                screenshot = page.screenshot(full_page=False)  # Above-fold only for speed
+                context.close()
+                break  # Success
+            except Exception as e:
+                if _attempt == 0 and _is_browser_infra_error(e):
+                    print(f"  [Visual] Browser crashed taking screenshot, recovering...")
+                    browser = _recover_browser()
+                    if not browser:
+                        raise  # Will be caught by outer except
+                    continue  # Retry
+                else:
+                    raise  # Will be caught by outer except
+        if not screenshot:
+            raise RuntimeError("Failed to capture screenshot after retry")
 
         prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
 
