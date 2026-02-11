@@ -1649,6 +1649,7 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
 
             # Reuse shared browser, just create fresh contexts per form
             context = None
+            pw_page = None
             for _attempt in range(3):  # Up to 3 attempts per form
                 try:
                     if _attempt == 0:
@@ -1797,6 +1798,12 @@ def check_form_submission(pages: dict, rule: dict) -> list[CheckResult]:
                             forms_failed.append(f"{short_url} - Error: {err_str[:50]}")
                         break
                 finally:
+                    if pw_page:
+                        try:
+                            pw_page.close()
+                        except Exception:
+                            pass
+                        pw_page = None
                     if context:
                         try:
                             context.close()
@@ -3489,6 +3496,7 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
         gc.collect()
 
         context = None
+        pw_page = None
         for _attempt in range(3):  # Up to 3 attempts per viewport
             try:
                 if _attempt == 0:
@@ -3502,17 +3510,17 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                     viewport={"width": vp["width"], "height": vp["height"]},
                     user_agent=USER_AGENT
                 )
-                page = context.new_page()
-                # Block images, media, fonts, and analytics to save memory.
+                # Block images, media, fonts at context level to save memory.
                 # Responsive checks only need DOM + CSS for layout validation.
-                page.route("**/*", lambda route: route.abort()
+                context.route("**/*", lambda route: route.abort()
                     if route.request.resource_type in ("image", "media", "font")
                     else route.continue_())
-                page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
-                page.wait_for_timeout(2000)  # Brief settle time for layout
+                pw_page = context.new_page()
+                pw_page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
+                pw_page.wait_for_timeout(2000)  # Brief settle time for layout
 
                 # Check for horizontal overflow (common responsive issue)
-                has_overflow = page.evaluate("""
+                has_overflow = pw_page.evaluate("""
                     () => document.documentElement.scrollWidth > document.documentElement.clientWidth
                 """)
 
@@ -3520,7 +3528,7 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                     issues.append(f"{vp['name']} ({vp['width']}px): Horizontal scroll detected")
 
                 # Check if main content is visible
-                main_visible = page.evaluate("""
+                main_visible = pw_page.evaluate("""
                     () => {
                         const main = document.querySelector('main, .main-content, #main, article, .et_pb_section');
                         if (!main) return true;  // No main element to check
@@ -3539,6 +3547,12 @@ def check_responsive_viewports(pages: dict, rule: dict, crawler=None) -> list[Ch
                 if _attempt >= 2:
                     issues.append(f"{vp['name']}: Failed after 3 attempts - {str(e)[:50]}")
             finally:
+                if pw_page:
+                    try:
+                        pw_page.close()
+                    except Exception:
+                        pass
+                    pw_page = None
                 if context:
                     try:
                         context.close()
@@ -3626,9 +3640,15 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
             browser = _get_shared_browser()
             if browser:
                 for contact_url in contact_pages[:2]:  # Check up to 2 contact pages
+                    context = None
                     pw_page = None
                     try:
-                        pw_page = browser.new_page()
+                        context = browser.new_context(user_agent=USER_AGENT)
+                        # Block images, media, fonts — only need HTML for map coordinates
+                        context.route("**/*", lambda route: route.abort()
+                            if route.request.resource_type in ("image", "media", "font")
+                            else route.continue_())
+                        pw_page = context.new_page()
                         pw_page.goto(contact_url, timeout=30000, wait_until="domcontentloaded")
                         pw_page.wait_for_timeout(3000)  # Let JS-rendered maps load
                         html = pw_page.content()
@@ -3650,6 +3670,11 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
                         if pw_page:
                             try:
                                 pw_page.close()
+                            except Exception:
+                                pass
+                        if context:
+                            try:
+                                context.close()
                             except Exception:
                                 pass
 
@@ -3905,6 +3930,7 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         # Take screenshot (with retry on browser crash/timeout)
         screenshot = None
         context = None
+        pw_page = None
         for _attempt in range(3):
             try:
                 if _attempt == 0:
@@ -3917,18 +3943,24 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     viewport={"width": 1280, "height": 720},
                     user_agent=USER_AGENT
                 )
-                page = context.new_page()
-                page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)  # Let images/styles render for screenshot
+                pw_page = context.new_page()
+                pw_page.goto(homepage_url, timeout=30000, wait_until="domcontentloaded")
+                pw_page.wait_for_timeout(3000)  # Let images/styles render for screenshot
 
                 # Take above-fold screenshot (smaller viewport = faster render)
-                screenshot = page.screenshot(full_page=False, timeout=60000)
+                screenshot = pw_page.screenshot(full_page=False, timeout=60000)
                 break  # Success
             except Exception as e:
                 print(f"  [Visual] Attempt {_attempt+1}/3 failed: {str(e)[:60]}")
                 if _attempt >= 2:
                     raise  # Will be caught by outer except
             finally:
+                if pw_page:
+                    try:
+                        pw_page.close()
+                    except Exception:
+                        pass
+                    pw_page = None
                 if context:
                     try:
                         context.close()
