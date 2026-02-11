@@ -3876,7 +3876,7 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
             try:
                 _last_ai_call_time = _time.time()
                 response = _gemini_client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash",
                     contents=[
                         types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
                         prompt,
