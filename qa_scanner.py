@@ -4346,6 +4346,79 @@ def clear_ai_caches():
     _ai_error_count = 0
 
 
+def _analyze_images_with_ai(images: list[bytes], prompt: str, max_retries: int = 3) -> str:
+    """Analyze multiple images in a single AI call. Gemini and Claude both support multi-image."""
+    import base64
+    import time as _time
+    global _gemini_client, _anthropic_client, _last_ai_call_time
+    global _ai_throttle_delay, _ai_success_streak, _ai_error_count
+
+    with _ai_throttle_lock:
+        sleep_for = max(0.0, _ai_throttle_delay - (_time.time() - _last_ai_call_time))
+    if sleep_for:
+        _time.sleep(sleep_for)
+    with _ai_throttle_lock:
+        _last_ai_call_time = _time.time()
+
+    if AI_PROVIDER == "gemini":
+        from google.genai import types
+
+        if _gemini_client is None:
+            _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
+        contents = [types.Part.from_bytes(data=img, mime_type="image/png") for img in images]
+        contents.append(prompt)
+
+        for attempt in range(max_retries):
+            try:
+                response = _gemini_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents,
+                )
+                with _ai_throttle_lock:
+                    _ai_success_streak += 1
+                    if _ai_success_streak >= 10 and _ai_throttle_delay > 0.3:
+                        _ai_throttle_delay = max(_ai_throttle_delay / 2, 0.3)
+                        _ai_success_streak = 0
+                return response.text.strip()
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "resource_exhausted" in err_str or "rate" in err_str:
+                    with _ai_throttle_lock:
+                        _ai_throttle_delay = min(_ai_throttle_delay * 2, 2.0)
+                        _ai_success_streak = 0
+                    delay = (2 ** attempt) * 2
+                    print(f"  [AI] Rate limited (attempt {attempt+1}/{max_retries}), waiting {delay}s...")
+                    _time.sleep(delay)
+                    with _ai_throttle_lock:
+                        _last_ai_call_time = _time.time()
+                    if attempt == max_retries - 1:
+                        _ai_error_count += 1
+                        return None
+                else:
+                    print(f"  [AI] Gemini error: {str(e)[:80]}")
+                    _ai_error_count += 1
+                    return None
+
+    elif AI_PROVIDER == "anthropic":
+        if _anthropic_client is None:
+            _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        content = []
+        for img in images:
+            content.append({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(img).decode("utf-8")}})
+        content.append({"type": "text", "text": prompt})
+
+        response = _anthropic_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": content}]
+        )
+        return response.content[0].text.strip()
+
+    return None
+
+
 def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3) -> str:
     """Helper to analyze an image using Gemini (primary) or Anthropic (fallback).
     Includes retry with exponential backoff for rate limit (429) errors
@@ -4533,11 +4606,39 @@ Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
     )]
 
 
+def _pick_visual_check_urls(pages: dict) -> list[str]:
+    """Pick homepage + up to 2 inner pages for visual consistency screenshots.
+    Skips blog posts, forms, privacy/accessibility pages — focuses on service pages."""
+    skip_patterns = ["/blog", "/privacy", "/accessibility", "/new-client",
+                     "/online-form", "/payment", "/contact", "/career"]
+    homepage_url = None
+    inner_urls = []
+
+    for url in pages.keys():
+        parsed = urllib.parse.urlparse(url)
+        if parsed.path in ("/", ""):
+            homepage_url = url
+        elif not any(p in parsed.path.lower() for p in skip_patterns):
+            inner_urls.append(url)
+
+    urls = []
+    if homepage_url:
+        urls.append(homepage_url)
+    elif pages:
+        urls.append(next(iter(pages)))
+
+    # Add up to 2 inner pages
+    for u in inner_urls[:2]:
+        urls.append(u)
+
+    return urls
+
+
 def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
     """
     AI-powered check for visual consistency (alignment, spacing, colors).
-    Replaces HUMAN-003 (visual consistency across site).
-    Uses Claude Vision API to analyze page screenshots.
+    Takes screenshots of homepage + up to 2 inner pages and sends them
+    in a single AI vision call for analysis.
     """
     if not PLAYWRIGHT_AVAILABLE:
         return [CheckResult(
@@ -4553,18 +4654,8 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
             details="AI analysis not available. Manually verify alignment, spacing, and color consistency.",
         )]
 
-    # Get homepage URL
-    homepage_url = None
-    for url in pages.keys():
-        parsed = urllib.parse.urlparse(url)
-        if parsed.path in ("/", ""):
-            homepage_url = url
-            break
-
-    if not homepage_url:
-        homepage_url = list(pages.keys())[0] if pages else None
-
-    if not homepage_url:
+    check_urls = _pick_visual_check_urls(pages)
+    if not check_urls:
         return [CheckResult(
             rule_id=rule["id"], category=rule["category"],
             check=rule["check"], status="SKIP", weight=rule["weight"],
@@ -4573,22 +4664,18 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
 
     try:
         import time as _time
-        # Take screenshot (with retry on browser crash/timeout)
-        # Use smaller viewport + block heavy resources + disable animations
-        screenshot = None
+        screenshots = []  # list of (url, bytes)
         context = None
         pw_page = None
         visual_start = _time.time()
-        print(f"  [Visual] Starting: url={homepage_url}, viewport=1024x768, full_page=False, timeout=20s", flush=True)
-        for _attempt in range(2):  # Max 2 attempts (was 3)
+        print(f"  [Visual] Screenshotting {len(check_urls)} pages at 1024x768", flush=True)
+
+        for _attempt in range(2):
             try:
-                if _attempt == 0:
-                    browser = _get_shared_browser()
-                else:
-                    # Restart browser between retries to clear memory
+                if _attempt > 0:
                     cleanup_shared_browser()
                     gc.collect()
-                    browser = _get_shared_browser()
+                browser = _get_shared_browser()
                 if not browser:
                     continue
                 context = browser.new_context(
@@ -4596,28 +4683,29 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     user_agent=USER_AGENT,
                     reduced_motion="reduce",
                 )
-                # Block only video/audio — keep images and fonts (Divi uses icon fonts
-                # like ETmodules; blocking fonts causes icons to render as "3" etc.)
+                # Block only video/audio — keep images and fonts
                 context.route("**/*", lambda route: route.abort() if route.request.resource_type == "media" else route.continue_())
                 pw_page = context.new_page()
-                # Disable animations (add_init_script runs before page scripts)
                 pw_page.add_init_script("""
                     const style = document.createElement('style');
                     style.textContent = '*, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }';
                     document.head.appendChild(style);
                 """)
-                pw_page.goto(homepage_url, timeout=20000, wait_until="domcontentloaded")
-                pw_page.wait_for_timeout(2000)  # Brief settle for CSS layout
 
-                screenshot = pw_page.screenshot(full_page=False, timeout=20000)
-                elapsed = _time.time() - visual_start
-                print(f"  [Visual] Screenshot captured in {elapsed:.1f}s (attempt {_attempt+1})", flush=True)
-                break  # Success
+                for url in check_urls:
+                    pw_page.goto(url, timeout=20000, wait_until="domcontentloaded")
+                    pw_page.wait_for_timeout(1500)
+                    shot = pw_page.screenshot(full_page=False, timeout=20000)
+                    screenshots.append((url, shot))
+                    print(f"  [Visual] Screenshot: {url.split('/')[-1] or 'homepage'}", flush=True)
+
+                break  # All screenshots captured
             except Exception as e:
+                screenshots = []
                 elapsed = _time.time() - visual_start
                 print(f"  [Visual] Attempt {_attempt+1}/2 failed after {elapsed:.1f}s: {str(e)[:60]}", flush=True)
                 if _attempt >= 1:
-                    raise  # Will be caught by outer except
+                    raise
             finally:
                 if pw_page:
                     try:
@@ -4631,10 +4719,18 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
                     except Exception:
                         pass
                     context = None
-        if not screenshot:
-            raise RuntimeError("Failed to capture screenshot after 2 attempts")
 
-        prompt = """Analyze this veterinary clinic website screenshot for OBVIOUS visual defects only.
+        if not screenshots:
+            raise RuntimeError("Failed to capture screenshots after 2 attempts")
+
+        elapsed = _time.time() - visual_start
+        print(f"  [Visual] {len(screenshots)} screenshots captured in {elapsed:.1f}s", flush=True)
+
+        page_labels = ", ".join(
+            url.split("/")[-1] or "homepage" for url, _ in screenshots
+        )
+        prompt = f"""Analyze these {len(screenshots)} veterinary clinic website screenshots for OBVIOUS visual defects only.
+The screenshots show: {page_labels}.
 
 Flag ONLY these clear-cut problems:
 1. Text visibly overlapping other text or images
@@ -4646,16 +4742,17 @@ DO NOT flag:
 - Color or contrast choices (these are intentional design decisions)
 - Subjective spacing preferences
 - Close/X buttons or navigation icons (these are functional UI elements)
-- Black/empty areas where videos would play (video was disabled for this screenshot)
+- Black/empty areas where videos would play (video was disabled for these screenshots)
 - Any issue you are not highly confident about
 
 Default to PASS. Most professionally built websites should pass this check.
 
-If the page looks like a normal, functioning website, respond: PASS
+If the pages look like a normal, functioning website, respond: PASS
 
-Only if there are clearly broken visual elements, respond: ISSUES: [list specific problems]"""
+Only if there are clearly broken visual elements, respond: ISSUES: [list specific problems with which page]"""
 
-        result_text = _analyze_image_with_ai(screenshot, prompt)
+        image_bytes_list = [shot for _, shot in screenshots]
+        result_text = _analyze_images_with_ai(image_bytes_list, prompt)
 
         if not result_text:
             return [CheckResult(
@@ -4665,24 +4762,25 @@ Only if there are clearly broken visual elements, respond: ISSUES: [list specifi
             )]
 
         ai_name = "Gemini" if AI_PROVIDER == "gemini" else "Claude"
+        pages_checked = f"Checked {len(screenshots)} pages ({page_labels})"
         if result_text.startswith("PASS"):
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details=f"[{ai_name} Vision] Homepage shows consistent alignment, spacing, and color usage.",
+                details=f"[{ai_name} Vision] {pages_checked}. No visual defects found.",
             )]
         elif result_text.startswith("ISSUES"):
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="WARN", weight=rule["weight"],
-                details=f"[{ai_name} Vision] Found potential issues: {result_text}",
-                page_url=homepage_url,
+                details=f"[{ai_name} Vision] {pages_checked}. Found potential issues: {result_text}",
+                page_url=check_urls[0],
             )]
         else:
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="PASS", weight=rule["weight"],
-                details=f"[{ai_name} Vision] {result_text[:100]}",
+                details=f"[{ai_name} Vision] {pages_checked}. {result_text[:100]}",
             )]
 
     except Exception as e:
