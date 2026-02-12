@@ -165,18 +165,28 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     auto_rules = get_automatable_rules(rules)
     human_rules = get_human_review_rules(rules)
 
+    scan_issues = []  # Track scan health issues
+    check_errors = []  # Track checks that fell back to HUMAN_REVIEW due to errors
+
     # Check WP plugin BEFORE crawl — the crawl can trigger hosting rate-limits
     # which would cause the plugin endpoint to return 503 (false "not detected")
     progress("wordpress", "Checking WordPress backend...")
     wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
     if not wp_client.is_available():
         wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
+        wp_rules_count = sum(1 for r in auto_rules if r.get("check_fn", "").startswith("check_wp_"))
+        if wp_rules_count > 0:
+            scan_issues.append(f"WordPress plugin not detected \u2014 {wp_rules_count} backend checks require manual review")
 
     # Crawl
     progress("crawling", "Crawling pages...")
     crawler = SiteCrawler(site_url)
     pages = crawler.crawl(max_pages=max_pages)
     progress("crawling", f"Found {len(pages)} pages")
+
+    # Collect crawl health issues
+    if hasattr(crawler, 'crawl_issues'):
+        scan_issues.extend(crawler.crawl_issues)
     _mem_mb(f"After crawl ({len(pages)} pages)")
     crawler._cleanup_browser()  # Release browser reference before checks
 
@@ -214,6 +224,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
             else:
                 return fn(pages, rule)
         except Exception as e:
+            check_errors.append(f"{rule['id']}: {str(e)[:100]}")
             return [CheckResult(
                 rule_id=rule["id"], category=rule["category"],
                 check=rule["check"], status="HUMAN_REVIEW", weight=rule["weight"],
@@ -243,6 +254,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     # (soups are freed, so Chromium has room). Then re-run PSI-dependent checks.
     from qa_scanner import _get_shared_browser
     if _psi_failed_urls:
+        scan_issues.append("PageSpeed Insights API unreachable \u2014 using Playwright fallback for performance checks")
         progress("browser", "Running local performance check (PSI was unreachable)...")
         cleanup_shared_browser()
         gc.collect()
@@ -300,6 +312,19 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     total_points_lost = sum(r.points_lost for r in all_results)
     score = round(max(0, 100 - total_points_lost))
 
+    # Collect check errors into scan issues
+    if check_errors:
+        scan_issues.append(
+            f"{len(check_errors)} automated check(s) failed with errors and fell back to manual review: "
+            + ", ".join(check_errors[:5])
+            + ("..." if len(check_errors) > 5 else "")
+        )
+
+    # Check for AI vision errors (soft failures — images skipped, not full check failures)
+    from qa_scanner import _ai_error_count as ai_errors
+    if ai_errors > 0:
+        scan_issues.append(f"AI vision analysis encountered {ai_errors} error(s) \u2014 some image checks may be incomplete")
+
     # Clean up shared Playwright browser, pre-extracted data, caches
     cleanup_shared_browser()
     clear_pre_extracted_data()
@@ -317,6 +342,7 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
         warnings=sum(1 for r in all_results if r.status == "WARN"),
         human_review=sum(1 for r in all_results if r.status == "HUMAN_REVIEW"),
         score=score, results=all_results,
+        scan_issues=scan_issues,
     )
     return report
 

@@ -934,6 +934,20 @@ def generate_html_report(report) -> str:
         </div>
     </div>''' if human_review > 0 else ''}
 
+    {f'''<!-- Scan Health Warning -->
+    <div style="background: linear-gradient(135deg, #FFFBEB, #FEF3C7); border: 2px solid #D97706; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div style="flex-shrink: 0; font-size: 22px; line-height: 1;">&#9888;</div>
+            <div>
+                <div style="font-weight: 700; color: #92400E; margin-bottom: 8px; font-size: 15px;">Scan Reliability Warning</div>
+                <ul style="margin: 0; padding-left: 18px; color: #78350F; font-size: 13px; line-height: 1.6;">
+                    {"".join(f"<li>{_esc(issue)}</li>" for issue in getattr(report, "scan_issues", []))}
+                </ul>
+                <div style="margin-top: 8px; font-size: 12px; color: #92400E; font-style: italic;">Results may not reflect the true state of the site. Consider re-scanning.</div>
+            </div>
+        </div>
+    </div>''' if getattr(report, "scan_issues", []) else ''}
+
     <!-- Failures -->
     <div class="section">
         <div class="section-heading heading-red"><span class="dot dot-red"></span> Failures &mdash; Action Required{f' <span style="font-size:12px;font-weight:500;margin-left:auto;opacity:0.7;">({failed} item{"s" if failed != 1 else ""})</span>' if failed else ''}</div>
@@ -1267,6 +1281,7 @@ def generate_json_report(report) -> dict:
             "partner": report.partner,
             "phase": report.phase,
             "pages_scanned": report.pages_scanned,
+            "scan_issues": getattr(report, "scan_issues", []),
         },
         "summary": {
             "score": report.score,
