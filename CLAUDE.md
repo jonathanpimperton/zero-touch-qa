@@ -42,10 +42,10 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Orchestrates scan memory lifecycle: parallel checks → pre-extract → free soups → sequential browser checks with restarts. Includes `psutil` memory instrumentation. |
+| `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Orchestrates scan memory lifecycle: parallel checks → pre-extract → free soups → PSI Playwright fallback (if needed) → sequential browser checks with restarts. Includes `psutil` memory instrumentation. Limits concurrent scans to 1 via semaphore. |
 | `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
-| `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests`, with optional Playwright (headless browser) fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API, LanguageTool API (grammar/spelling), and Gemini Vision API (AI image analysis). Checks include broken links, broken images, Open Graph tags, mixed content, AI-powered photo analysis, partner-specific validations, and more. |
+| `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests` with connection pooling (`HTTPAdapter`), with optional Playwright fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API (with retry/backoff and Playwright-based local fallback), LanguageTool API (grammar/spelling), and Gemini 2.5 Flash Vision API (AI image analysis, with adaptive throttle and thread-safe rate limiting). |
 | `wp_api.py` | WordPress API clients for back-end checks. `PetDeskQAPluginClient` (recommended) uses the PetDesk QA Connector plugin with a shared API key. `WordPressAPIClient` (fallback) uses Application Password auth. Both verify plugin/theme updates, timezone, media cleanup, and form notifications. |
 | `petdesk-qa-plugin/` | WordPress plugin directory containing `petdesk-qa-connector.php`. Install on sites to enable automated back-end checks. |
 | `petdesk-qa-plugin.zip` | Zipped plugin ready for upload via WordPress admin > Plugins > Add New > Upload Plugin. |
@@ -155,8 +155,8 @@ Key functions in `db.py`:
 ## Rule Categories
 
 - `search_replace` - Leftover template text (WhiskerFrame, placeholder addresses/phones/emails)
-- `wordpress_backend` - Plugin/theme updates, timezone settings, media library cleanup, form notifications (requires WP_USER + WP_APP_PASSWORD)
-- `functionality` - Broken links (403s reported as warnings, not failures), broken images, mixed content (HTTP on HTTPS), phone/email hyperlinks, form submission testing (Playwright fills and submits forms, verifies redirect to thank-you page), mobile responsiveness, Lighthouse (requires PSI_API_KEY, otherwise flagged for human review)
+- `wordpress_backend` - Plugin/theme updates, timezone settings, media library cleanup, form notifications (requires PetDesk QA Connector plugin)
+- `functionality` - Broken links (403s reported as warnings, not failures), broken images, mixed content (HTTP on HTTPS), phone/email hyperlinks, form submission testing (Playwright fills and submits forms, verifies redirect to thank-you page), mobile responsiveness, Lighthouse (uses PSI_API_KEY with retry/backoff; falls back to Playwright-based local performance check if PSI unreachable — never HUMAN_REVIEW)
 - `craftsmanship` - Logo, favicon, contrast/accessibility
 - `content` - H1 tags, alt text, meta titles/descriptions, Open Graph social sharing tags, placeholder text, privacy policy, accessibility statement, Whiskercloud removal
 - `grammar_spelling` - Grammar and spelling errors checked via LanguageTool API (free, open-source)
@@ -260,6 +260,16 @@ The app runs on Render.com's free tier with a 512MB container limit. A full scan
 - **Solution**: restart Chromium before EVERY sequential check (`cleanup_shared_browser()` + `_get_shared_browser()`) to reset memory
 - **With `domcontentloaded`** wait strategy (not `networkidle`), each restart cycle takes ~5 seconds
 
+### Visual consistency screenshot optimization
+- Viewport 1024x768 (smaller = faster render), timeout 20s, max 2 attempts
+- Browser restart between retries to reset leaked memory
+- Route blocking: `resource_type == "media"` only — blocks video/audio to save memory. Fonts are NOT blocked (Divi uses icon fonts like ETmodules; blocking fonts causes icons to render as "3")
+- CSS animations disabled via `add_init_script` (prevents mid-animation screenshots)
+- AI prompt instructs Gemini to ignore black/empty video placeholder areas (caused by media blocking)
+
+### Connection pooling
+`SiteCrawler` uses `requests.HTTPAdapter(pool_connections=10, pool_maxsize=10, pool_block=True)` for TLS connection reuse across crawl requests. This avoids TLS handshake overhead on every page fetch.
+
 ### Why `domcontentloaded` not `networkidle`
 WordPress/Divi sites load analytics scripts (Google Analytics, Facebook Pixel, HotJar) that fire continuously and never go idle. Using `wait_until="networkidle"` caused every Playwright operation to timeout at 30-60 seconds. `domcontentloaded` fires in 2-3 seconds when the DOM is ready, plus a short `wait_for_timeout()` settle time for images/styles.
 
@@ -345,7 +355,7 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 ## Key Configuration (.env)
 
 - `DATABASE_URL` - PostgreSQL connection string. Set automatically by Render via `render.yaml`. Without it, app falls back to filesystem storage.
-- `PSI_API_KEY` - Google PageSpeed Insights key. Enables rendered-page checks (mobile usability, performance, contrast, CLS). Free from Google Cloud Console. Without it, scanner falls back to HTML-only checks.
+- `PSI_API_KEY` - Google PageSpeed Insights key. Enables rendered-page checks (mobile usability, performance, contrast, CLS). Free from Google Cloud Console. PSI API is called with retry/backoff (3 attempts, 5s/15s/30s delays, switches to desktop strategy on retries). If PSI is unreachable (common for staging URLs like *.wpenginepowered.com), falls back to Playwright-based local performance check — never HUMAN_REVIEW.
 - `PETDESK_QA_API_KEY` - Shared API key for the PetDesk QA Connector plugin. Must match the key in the plugin. Default is `petdesk-qa-2026-hackathon-key` for demo purposes. Change in production.
 - `WRIKE_API_TOKEN` - For posting scan results back to Wrike tasks. Not yet configured (no Wrike access during hackathon).
 - `WRIKE_CF_*` - Wrike custom field IDs for site URL, partner, and phase.
@@ -355,7 +365,7 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 
 ## AI-Powered Checks
 
-The scanner uses Gemini Vision API (primary) or Claude Vision API (fallback) for automated checks that previously required human judgment. These are prefixed with `AI-*` rule IDs:
+The scanner uses **Gemini 2.5 Flash** Vision API (primary) or Claude Vision API (fallback) for automated checks that previously required human judgment. AI calls use adaptive throttling (0.3s default, backs off to 2.0s on 429, halves after 10 successes) protected by a `threading.Lock` for thread safety. Image fetches are cached within a scan to avoid re-downloading. These are prefixed with `AI-*` rule IDs:
 
 | Rule ID | Check | What It Does |
 |---------|-------|--------------|
@@ -378,12 +388,12 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 ## Scan Flow
 
 1. `get_rules_for_scan(partner, phase)` loads applicable rules from `rules.json`
-2. `SiteCrawler.crawl()` fetches and parses up to 30 pages (uses `requests`, with Playwright fallback for JS-rendered pages)
-3. **Parallel phase**: Non-browser checks run in parallel (ThreadPoolExecutor, 4 workers) — broken links, grammar, alt text, images, Open Graph, mixed content, etc.
+2. `SiteCrawler.crawl()` fetches and parses up to 30 pages sequentially (uses `requests` with connection pooling via `HTTPAdapter`, with Playwright fallback for JS-rendered pages)
+3. **Parallel phase**: Non-browser checks run in parallel (ThreadPoolExecutor, 4 workers) — broken links, grammar, alt text, images, Open Graph, mixed content, PSI API call, etc.
 4. **Pre-extraction**: Form metadata and map iframe data extracted from soups into plain dicts
 5. **Free memory**: All page soups and HTML freed (~60MB reclaimed) before launching Chromium
-6. **Sequential browser phase**: Form submission, map location, visual consistency, and responsive viewports run one at a time with browser restarts between each check
-7. PageSpeed Insights API called for homepage (if PSI_API_KEY is set); otherwise flagged for human review
+6. **PSI fallback** (if PSI API failed): Playwright-based local performance check runs first — gathers LCP, CLS, viewport, tap targets, font sizes, contrast via JS. Then PSI-dependent checks re-run with local data.
+7. **Sequential browser phase**: Form submission, map location, visual consistency, and responsive viewports run one at a time with browser restarts between each check
 8. LanguageTool API called for grammar/spelling on up to 10 pages (4 concurrent API calls). Spelling = FAIL (deduplicated by word, medical terms filtered), Grammar = WARN
 9. Every error includes the exact page URL where it was found
 10. Scoring: 100 - sum(weight) for FAIL, warnings at 50% weight, pending human reviews at 30% weight
@@ -459,3 +469,11 @@ Note: PDF generation requires adding WeasyPrint or a similar library in producti
 5. **QA self-service** - Rules editor and scan history accessible via web app
 6. **Full partner coverage** - Partner-specific rules for all 8 partners (Independent, Western, Heartland, United, Rarebreed, EverVet, Encore, AmeriVet)
 7. **WordPress API integration** - Back-end checks for plugins, themes, timezone, media, and form notifications
+
+## Known Issues (Low Severity)
+
+- **`page.details` dead code** (qa_scanner.py:493) — `PageData` has no `details` field. Setting it on a request exception is harmless but nothing reads it.
+- **XSS in error display** (app.py:706,717) — Error messages displayed via `innerHTML`. Low risk: error text comes from internal Python exceptions, not user input. Fix: use `textContent` instead.
+- **Admin GET reset has no auth** (app.py:1818) — `GET /admin/clear-history?confirm=reset` bypasses admin key check. Intentional for hackathon testing. Remove GET path for production.
+- **Wrike comment HTML not escaped** (qa_report.py) — Rule details injected into Wrike HTML without escaping. Wrike integration is not yet active.
+- **`scan_history` not thread-locked** (app.py:68-75) — List mutated from multiple threads without a lock. Mitigated by gunicorn `--workers 1 --threads 1` config.

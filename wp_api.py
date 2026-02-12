@@ -88,12 +88,29 @@ class PetDeskQAPluginClient:
         self._available = None  # Cached availability status
 
     def is_available(self) -> bool:
-        """Check if the PetDesk QA plugin is installed and responding."""
+        """Check if the PetDesk QA plugin is installed and responding.
+
+        Retries with backoff on 503 (hosting rate-limit) to avoid
+        false negatives when the site is temporarily throttling requests.
+        """
         if self._available is not None:
             return self._available
 
+        import time
+        RETRY_DELAYS = [2, 5]  # seconds between retries on 503
+
         try:
-            resp = self.session.get(self.endpoint, timeout=10)
+            resp = None
+            for attempt in range(1 + len(RETRY_DELAYS)):
+                resp = self.session.get(self.endpoint, timeout=10)
+                if resp.status_code not in (429, 503):
+                    break
+                if attempt < len(RETRY_DELAYS):
+                    retry_after = resp.headers.get("Retry-After")
+                    delay = int(retry_after) if retry_after and retry_after.isdigit() else RETRY_DELAYS[attempt]
+                    print(f"  [WPBE] Plugin endpoint returned {resp.status_code}, retrying in {delay}s...")
+                    time.sleep(delay)
+
             self._available = resp.status_code == 200
             if self._available:
                 self._site_data = resp.json().get("data", {})

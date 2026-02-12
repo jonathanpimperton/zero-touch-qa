@@ -440,16 +440,39 @@ class SiteCrawler:
                 pass
 
     def fetch_page(self, url: str) -> Optional[PageData]:
-        """Fetch a single page and return PageData."""
+        """Fetch a single page and return PageData.
+
+        Retries with exponential backoff on 503 (Service Unavailable) responses,
+        which commonly indicate WP Engine rate-limiting.
+        """
         url = self._normalize_url(url)
         if url in self.visited:
             return self.pages.get(url)
         self.visited.add(url)
 
+        RETRY_DELAYS = [2, 5, 10]  # seconds between retries on 429/503
+        RETRYABLE_STATUSES = {429, 503}
+
         try:
-            start = time.time()
-            resp = self.session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
-            load_time = time.time() - start
+            resp = None
+            load_time = 0.0
+
+            for attempt in range(1 + len(RETRY_DELAYS)):
+                start = time.time()
+                resp = self.session.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+                load_time = time.time() - start
+
+                if resp.status_code not in RETRYABLE_STATUSES:
+                    break
+
+                if attempt < len(RETRY_DELAYS):
+                    # Respect Retry-After header if present (common with 429)
+                    retry_after = resp.headers.get("Retry-After")
+                    delay = int(retry_after) if retry_after and retry_after.isdigit() else RETRY_DELAYS[attempt]
+                    print(f"  [Crawl] {resp.status_code} on {url}, retrying in {delay}s (attempt {attempt + 1}/{len(RETRY_DELAYS)})...")
+                    time.sleep(delay)
+                else:
+                    print(f"  [Crawl] {resp.status_code} on {url} after {len(RETRY_DELAYS)} retries, accepting as-is")
 
             if "text/html" not in resp.headers.get("content-type", ""):
                 return None
@@ -521,7 +544,12 @@ class SiteCrawler:
         return new_links
 
     def crawl(self, max_pages: int = MAX_PAGES_TO_CRAWL) -> dict[str, PageData]:
-        """Crawl the site starting from base_url, following internal links."""
+        """Crawl the site starting from base_url, following internal links.
+
+        Includes a small delay between requests to avoid triggering
+        WP Engine / hosting provider rate-limiting.
+        """
+        CRAWL_DELAY = 0.5  # seconds between page fetches
         queue = [self.base_url]
         crawled = 0
 
@@ -532,6 +560,10 @@ class SiteCrawler:
 
                 if not self._is_crawlable(normalized) or normalized in self.visited:
                     continue
+
+                # Polite delay between requests (skip before the first)
+                if crawled > 0:
+                    time.sleep(CRAWL_DELAY)
 
                 page = self.fetch_page(normalized)
                 if page and page.soup:

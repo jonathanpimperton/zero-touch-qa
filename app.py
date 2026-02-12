@@ -165,6 +165,13 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     auto_rules = get_automatable_rules(rules)
     human_rules = get_human_review_rules(rules)
 
+    # Check WP plugin BEFORE crawl — the crawl can trigger hosting rate-limits
+    # which would cause the plugin endpoint to return 503 (false "not detected")
+    progress("wordpress", "Checking WordPress backend...")
+    wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
+    if not wp_client.is_available():
+        wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
+
     # Crawl
     progress("crawling", "Crawling pages...")
     crawler = SiteCrawler(site_url)
@@ -172,13 +179,6 @@ def run_scan(site_url: str, partner: str, phase: str, max_pages: int = 30, progr
     progress("crawling", f"Found {len(pages)} pages")
     _mem_mb(f"After crawl ({len(pages)} pages)")
     crawler._cleanup_browser()  # Release browser reference before checks
-
-    # Try PetDesk QA Plugin first (recommended - single API key for all sites)
-    # Falls back to HUMAN_REVIEW if plugin not installed
-    progress("wordpress", "Checking WordPress backend...")
-    wp_client = PetDeskQAPluginClient(site_url, PETDESK_QA_API_KEY)
-    if not wp_client.is_available():
-        wp_client = None  # Will trigger HUMAN_REVIEW fallback in check functions
 
     # Run checks: fast checks in parallel, Playwright checks sequentially
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -674,6 +674,13 @@ HOME_PAGE = """<!DOCTYPE html>
                         phase: document.getElementById('phase').value,
                     })
                 });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    status.textContent = '❌ ' + (errData.error || 'Scan request failed');
+                    btn.disabled = false;
+                    return;
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -1568,6 +1575,31 @@ def history_page():
 
 
 # ---------------------------------------------------------------------------
+# Self-scan detection
+# ---------------------------------------------------------------------------
+
+def _is_self_scan(site_url: str) -> bool:
+    """Check if the target URL points back at this app (would deadlock on single-worker)."""
+    from urllib.parse import urlparse
+    try:
+        target_host = urlparse(site_url).hostname or ""
+        own_host = request.host.split(":")[0]  # strip port
+        if target_host == own_host:
+            return True
+        # Also catch the Render deployment URL regardless of Host header
+        if "zero-touch-qa" in target_host and "onrender.com" in target_host:
+            return True
+    except Exception:
+        pass
+    return False
+
+SELF_SCAN_ERROR = (
+    "Cannot scan this app's own URL. The scanner runs on a single worker, "
+    "so Playwright and PageSpeed Insights cannot reach the site while a scan "
+    "is in progress (deadlock). Please scan an external website instead."
+)
+
+# ---------------------------------------------------------------------------
 # Routes - API (called by web UI and Wrike webhook)
 # ---------------------------------------------------------------------------
 
@@ -1584,6 +1616,9 @@ def api_scan_stream():
 
     if not site_url.startswith("http"):
         site_url = "https://" + site_url
+
+    if _is_self_scan(site_url):
+        return jsonify({"success": False, "error": SELF_SCAN_ERROR}), 400
 
     def generate():
         import queue
@@ -1721,6 +1756,9 @@ def api_scan():
 
     if not site_url.startswith("http"):
         site_url = "https://" + site_url
+
+    if _is_self_scan(site_url):
+        return jsonify({"success": False, "error": SELF_SCAN_ERROR}), 400
 
     try:
         report = run_scan(site_url, partner, phase)
