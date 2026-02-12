@@ -45,7 +45,7 @@ qa_rules.py     qa_scanner.py    db.py    wp_api.py
 | `app.py` | Flask web app. Main entry point. Serves the browser UI with Scanner, Rules, and History pages. Handles `/api/scan` for scans and `/webhook/wrike` for Wrike automation. Orchestrates scan memory lifecycle: parallel checks → pre-extract → free soups → PSI Playwright fallback (if needed) → sequential browser checks with restarts. Includes `psutil` memory instrumentation. Limits concurrent scans to 1 via semaphore. |
 | `db.py` | PostgreSQL database layer. Stores scan results, reports, and scan IDs. Falls back gracefully when `DATABASE_URL` is not set (local dev uses filesystem). |
 | `qa_rules.py` | Rule engine. Loads rules from `rules.json`. Each rule has an ID, category, phase, weight, partner scope, and a pointer to its check function. Call `get_rules_for_scan(partner, phase)` to get applicable rules. |
-| `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests` with connection pooling (`HTTPAdapter`), with optional Playwright fallback for JS-rendered content. `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API (with retry/backoff and Playwright-based local fallback), LanguageTool API (grammar/spelling), and Gemini 2.5 Flash Vision API (AI image analysis, with adaptive throttle and thread-safe rate limiting). |
+| `qa_scanner.py` | Site crawler and 74 check functions. `SiteCrawler` fetches pages via `requests` with connection pooling (`HTTPAdapter`), with optional Playwright fallback for JS-rendered content and sitemap-based fallback when BFS finds too few pages. Handles WP Engine staging domain mismatches (rewrites sitemap/logo URLs). `CHECK_FUNCTIONS` maps rule names to functions (merged with 5 WordPress checks from wp_api.py = 79 total). Integrates with Google PageSpeed Insights API (with retry/backoff and Playwright-based local fallback), LanguageTool API (grammar/spelling), and Gemini 2.5 Flash Vision API (AI image analysis, with adaptive throttle and thread-safe rate limiting). |
 | `wp_api.py` | WordPress API clients for back-end checks. `PetDeskQAPluginClient` (recommended) uses the PetDesk QA Connector plugin with a shared API key. `WordPressAPIClient` (fallback) uses Application Password auth. Both verify plugin/theme updates, timezone, media cleanup, and form notifications. |
 | `petdesk-qa-plugin/` | WordPress plugin directory containing `petdesk-qa-connector.php`. Install on sites to enable automated back-end checks. |
 | `petdesk-qa-plugin.zip` | Zipped plugin ready for upload via WordPress admin > Plugins > Add New > Upload Plugin. |
@@ -243,6 +243,27 @@ When a fetched page has very little visible body text (under 200 chars) despite 
 - Set `PLAYWRIGHT_ALWAYS=1` in `.env` to force Playwright for all pages (useful for debugging)
 - Docker deployment includes Chromium automatically
 
+## Sitemap-Based Crawl Fallback
+
+The BFS crawl discovers pages by following `<a>` tags in static HTML. When a site renders its navigation via JavaScript (common with Divi themes), `requests` can't see those links and the crawl stalls at 3-5 pages (just footer links like privacy-policy, accessibility-statement).
+
+**Fallback**: After BFS, if fewer than 5 pages were found, the crawler fetches the site's WordPress sitemap to discover URLs. It tries three standard locations in order:
+1. `/sitemap_index.xml` (Yoast SEO / Rank Math)
+2. `/sitemap.xml` (generic)
+3. `/wp-sitemap.xml` (WordPress core since 5.5)
+
+For sitemap indexes, it follows child sitemaps (e.g. `/post-sitemap.xml`, `/page-sitemap.xml`). Sitemap-discovered URLs are added to the BFS queue, so links found on those pages are also followed.
+
+**Security**: Child sitemap fetches are validated to be on the same domain (SSRF prevention), recursion is capped at depth 2, and XML with DOCTYPE declarations is rejected (Billion Laughs prevention).
+
+## WP Engine Staging Domain Mismatch
+
+WP Engine staging sites (e.g. `trinityvethosp.wpenginepowered.com`) have a pervasive issue: WordPress stores the production domain internally, so sitemaps, navigation links, logo hrefs, and other internal URLs all reference the production domain (e.g. `trinityvet716.com`) instead of the staging domain. This affects:
+
+- **Sitemap URLs** — `<loc>` entries in sitemaps point to production domain. The sitemap parser rewrites these to the scanner's target domain via `_rewrite_sitemap_url()`.
+- **Logo link** — The logo's `<a href>` points to the production domain root. The logo check now accepts any root-path link regardless of domain.
+- **Internal navigation links** — Links in the HTML point to production domain. BFS crawl only follows same-domain links, so these are invisible to the crawler (which is why the sitemap fallback is needed).
+
 ## Memory Management (512MB Render Free Tier)
 
 The app runs on Render.com's free tier with a 512MB container limit. A full scan uses Python (~200MB) plus Chromium (~247MB in `--single-process` mode), leaving very little headroom. The scan engine uses several strategies to stay within budget:
@@ -382,13 +403,14 @@ These 6 AI-powered checks reduce human review items from 28 to 22 while improvin
 
 - `thestorybookal.wpenginepowered.com` - Test site with known QA issues. Scored **74/100** (15 failures, 5 warnings).
 - `essentialsfina.wpenginepowered.com` - Site that passed Final QA. Scored **89/100** (5 failures, 4 warnings).
+- `trinityvethosp.wpenginepowered.com` - JS-rendered nav site (BFS only found 3 pages; sitemap fallback discovers 30). Scored **79/100** (3 failures, 7 warnings). Good test case for staging domain mismatch and sitemap fallback.
 
 Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 
 ## Scan Flow
 
 1. `get_rules_for_scan(partner, phase)` loads applicable rules from `rules.json`
-2. `SiteCrawler.crawl()` fetches and parses up to 30 pages sequentially (uses `requests` with connection pooling via `HTTPAdapter`, with Playwright fallback for JS-rendered pages)
+2. `SiteCrawler.crawl()` fetches and parses up to 30 pages via BFS (uses `requests` with connection pooling via `HTTPAdapter`, with Playwright fallback for JS-rendered pages). If BFS finds <5 pages, falls back to WordPress sitemap discovery (see "Sitemap-Based Crawl Fallback" above).
 3. **Parallel phase**: Non-browser checks run in parallel (ThreadPoolExecutor, 4 workers) — broken links, grammar, alt text, images, Open Graph, mixed content, PSI API call, etc.
 4. **Pre-extraction**: Form metadata and map iframe data extracted from soups into plain dicts
 5. **Free memory**: All page soups and HTML freed (~60MB reclaimed) before launching Chromium
@@ -397,15 +419,17 @@ Demo reports available as `demo_test_site.html` / `demo_final_site.html`.
 8. LanguageTool API called for grammar/spelling on up to 10 pages (4 concurrent API calls). Spelling = FAIL (deduplicated by word, medical terms filtered), Grammar = WARN
 9. Every error includes the exact page URL where it was found
 10. Scoring: 100 - sum(weight) for FAIL, warnings at 50% weight, pending human reviews at 30% weight
-11. Scan saved to PostgreSQL (primary) and filesystem (fallback)
-12. Human review checklist allows Pass/Fail/N/A with comments; FAIL decisions lower the score in real-time. Decisions persist to database via `/api/review`
+11. **Scan health issues** collected throughout (crawl issues, WP plugin missing, PSI fallback, check errors, AI vision errors) and surfaced in the report
+12. Scan saved to PostgreSQL (primary) and filesystem (fallback)
+13. Human review checklist allows Pass/Fail/N/A with comments; FAIL decisions lower the score in real-time. Decisions persist to database via `/api/review`
 
 ## Report Layout
 
 Each HTML report includes a **toolbar** at the top (hidden when printing) with navigation links back to the Scanner and Scan History (greyed out when viewing as a local file), a "Copy Report URL" button for easy sharing, and a "Save as PDF" button that opens the browser's print dialog for one-click PDF export.
 
-The report body has four visually distinct sections:
+The report body has these sections:
 
+0. **Scan Health Warning** (amber banner, conditional) — Only shown when `scan_issues` is non-empty. Lists issues that may affect scan reliability (low page count, WP plugin missing, PSI fallback, check errors, AI vision errors). Advises re-scanning.
 1. **Failures** (red cards) — Each card shows:
    - **Headline**: Short summary of what's wrong (e.g., "Social links found outside footer (2 pages)")
    - **Fix advice**: Green box with specific guidance on how to fix the issue
