@@ -225,7 +225,7 @@ def pre_extract_page_data(pages):
         if not page.soup:
             continue
         iframe_srcs = [iframe.get("src", "") for iframe in page.soup.find_all("iframe")]
-        text = page.soup.get_text()
+        text = " ".join(page.soup.get_text(separator=" ").split())
         if iframe_srcs or text:
             map_data[url] = {
                 "iframe_srcs": iframe_srcs,
@@ -325,6 +325,7 @@ class ScanReport:
     human_review: int = 0
     score: float = 100.0
     results: list = field(default_factory=list)
+    scan_issues: list = field(default_factory=list)
 
 
 # =============================================================================
@@ -543,6 +544,63 @@ class SiteCrawler:
                 new_links.append(clean_link)
         return new_links
 
+    def _parse_sitemap_xml(self, xml_text: str, _depth: int = 0) -> list[str]:
+        """Parse sitemap XML (index or urlset) and return page URLs."""
+        import xml.etree.ElementTree as ET
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+
+        if _depth > 2:
+            return []
+
+        # Reject XML with DOCTYPE to prevent entity expansion attacks (Billion Laughs).
+        # Valid sitemaps never contain DTDs.
+        if "<!DOCTYPE" in xml_text[:1000]:
+            return []
+
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return []
+
+        # Check if this is a sitemap index
+        child_sitemaps = root.findall(".//sm:sitemap/sm:loc", ns)
+        if child_sitemaps:
+            urls = []
+            for loc in child_sitemaps:
+                child_url = loc.text.strip() if loc.text else ""
+                # Validate child sitemap is on the same domain (prevent SSRF)
+                if not child_url or urllib.parse.urlparse(child_url).netloc != self.domain:
+                    continue
+                try:
+                    resp = self.session.get(child_url, timeout=REQUEST_TIMEOUT)
+                    if resp.status_code == 200:
+                        urls.extend(self._parse_sitemap_xml(resp.text, _depth + 1))
+                except Exception:
+                    continue
+            return urls
+
+        # Flat sitemap — extract URLs directly
+        return [loc.text.strip() for loc in root.findall(".//sm:url/sm:loc", ns) if loc.text]
+
+    def _fetch_sitemap_urls(self) -> list[str]:
+        """Try to discover page URLs from WordPress sitemaps."""
+        sitemap_paths = ["/sitemap_index.xml", "/sitemap.xml", "/wp-sitemap.xml"]
+        urls = []
+
+        for path in sitemap_paths:
+            try:
+                resp = self.session.get(self.base_url + path, timeout=REQUEST_TIMEOUT)
+                if resp.status_code != 200 or "xml" not in resp.headers.get("content-type", ""):
+                    continue
+                urls = self._parse_sitemap_xml(resp.text)
+                if urls:
+                    print(f"  [Sitemap] Found {len(urls)} URLs from {path}")
+                    break
+            except Exception:
+                continue
+
+        return [u for u in urls if self._is_crawlable(u) and self._normalize_url(u) not in self.visited]
+
     def crawl(self, max_pages: int = MAX_PAGES_TO_CRAWL) -> dict[str, PageData]:
         """Crawl the site starting from base_url, following internal links.
 
@@ -572,11 +630,49 @@ class SiteCrawler:
                     for link in self._collect_links(page):
                         if link not in queue:
                             queue.append(link)
+
+            # Sitemap fallback: if BFS found too few pages, seed queue from sitemap
+            if crawled < 5 and max_pages >= 10:
+                sitemap_urls = self._fetch_sitemap_urls()
+                if sitemap_urls:
+                    print(f"  [Sitemap] BFS found only {crawled} pages, adding {len(sitemap_urls)} from sitemap")
+                    for surl in sitemap_urls:
+                        queue.append(surl)
+
+                    # Resume BFS with sitemap-discovered URLs
+                    while queue and crawled < max_pages:
+                        url = queue.pop(0)
+                        normalized = self._normalize_url(url)
+                        if not self._is_crawlable(normalized) or normalized in self.visited:
+                            continue
+                        if crawled > 0:
+                            time.sleep(CRAWL_DELAY)
+                        page = self.fetch_page(normalized)
+                        if page and page.soup:
+                            crawled += 1
+                            print(f"  [{crawled}/{max_pages}] {page.status_code} - {normalized}")
+                            for link in self._collect_links(page):
+                                if link not in queue:
+                                    queue.append(link)
         finally:
             self._cleanup_browser()
 
         if self.js_rendered_pages:
             print(f"  [JS] {len(self.js_rendered_pages)} page(s) re-rendered with headless browser")
+
+        # Track crawl health issues
+        self.crawl_issues = []
+        error_pages = [url for url, p in self.pages.items() if p.status_code >= 400 or p.status_code == 0]
+        if error_pages and len(self.pages) > 0:
+            error_pct = len(error_pages) / len(self.pages)
+            if error_pct > 0.3:
+                self.crawl_issues.append(
+                    f"{len(error_pages)} of {len(self.pages)} pages returned errors (possible rate-limiting or site issues)"
+                )
+        if crawled < 5 and max_pages >= 10:
+            self.crawl_issues.append(
+                f"Only {crawled} pages crawled (expected more for a full site)"
+            )
 
         return self.pages
 
@@ -4075,7 +4171,7 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
                         if coord_match:
                             map_coords = (float(coord_match.group(1)), float(coord_match.group(2)))
                             map_page_url = url
-            text = page.soup.get_text()
+            text = " ".join(page.soup.get_text(separator=" ").split())
             addr_match = address_pattern.search(text)
             if addr_match:
                 page_address = addr_match.group(0).strip()
@@ -4215,13 +4311,16 @@ def _fetch_image_cached(src: str) -> bytes | None:
     return None
 
 
+_ai_error_count = 0  # Track AI vision errors within a scan
+
 def clear_ai_caches():
     """Clear AI-related caches between scans."""
     global _gemini_client, _anthropic_client, _image_fetch_cache
-    global _ai_throttle_delay, _ai_success_streak
+    global _ai_throttle_delay, _ai_success_streak, _ai_error_count
     _image_fetch_cache = {}
     _ai_throttle_delay = 0.3
     _ai_success_streak = 0
+    _ai_error_count = 0
 
 
 def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3) -> str:
@@ -4233,7 +4332,7 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
     import base64
     import time as _time
     global _gemini_client, _anthropic_client, _last_ai_call_time
-    global _ai_throttle_delay, _ai_success_streak
+    global _ai_throttle_delay, _ai_success_streak, _ai_error_count
 
     # Adaptive throttle: read state under lock, sleep outside, then re-lock to stamp
     with _ai_throttle_lock:
@@ -4280,9 +4379,11 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
                         _last_ai_call_time = _time.time()
                     if attempt == max_retries - 1:
                         print(f"  [AI] Rate limit exceeded after {max_retries} retries: {str(e)[:80]}")
+                        _ai_error_count += 1
                         return None
                 else:
                     print(f"  [AI] Gemini error: {str(e)[:80]}")
+                    _ai_error_count += 1
                     return None
 
     elif AI_PROVIDER == "anthropic":
