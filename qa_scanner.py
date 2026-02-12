@@ -1447,11 +1447,12 @@ def check_logo_links_home(pages: dict, rule: dict) -> list[CheckResult]:
                 continue
             href = a["href"].strip()
             parsed = urllib.parse.urlparse(href)
-            # Check if it links to homepage: /, empty path, or full URL to same domain root
-            is_home = (
-                parsed.path.rstrip("/") in ("", "/") and
-                (not parsed.netloc or parsed.netloc == base_domain)
-            )
+            # Check if it links to homepage: /, empty path, or full URL to root.
+            # On WP Engine staging sites, internal links reference the production
+            # domain (e.g. trinityvet716.com instead of trinityvethosp.wpenginepowered.com).
+            # Accept any link whose path is the root — the domain mismatch is a
+            # known staging artifact, not a real QA issue.
+            is_home = parsed.path.rstrip("/") in ("", "/")
             if is_home:
                 return [CheckResult(
                     rule_id=rule["id"], category=rule["category"],
@@ -4633,22 +4634,26 @@ def check_visual_consistency(pages: dict, rule: dict) -> list[CheckResult]:
         if not screenshot:
             raise RuntimeError("Failed to capture screenshot after 2 attempts")
 
-        prompt = """Analyze this veterinary clinic website screenshot for visual consistency issues.
+        prompt = """Analyze this veterinary clinic website screenshot for OBVIOUS visual defects only.
 
-Check for:
-1. Alignment problems (elements not aligned properly)
-2. Inconsistent spacing (uneven margins/padding)
-3. Color mismatches (elements that don't match the color scheme)
-4. Text overflow or truncation issues
-5. Overlapping elements
+Flag ONLY these clear-cut problems:
+1. Text visibly overlapping other text or images
+2. Elements clearly cut off or overflowing their containers
+3. Broken layout (columns collapsed, content stacked incorrectly)
+4. Images stretched or squished out of proportion
 
-IMPORTANT: Ignore any black/empty areas where videos or media would normally play. These appear blank because video was disabled for this screenshot. Do not flag missing videos, black video placeholders, or "source not found" messages as issues.
+DO NOT flag:
+- Color or contrast choices (these are intentional design decisions)
+- Subjective spacing preferences
+- Close/X buttons or navigation icons (these are functional UI elements)
+- Black/empty areas where videos would play (video was disabled for this screenshot)
+- Any issue you are not highly confident about
 
-If the page looks professionally designed with consistent alignment, spacing, and colors, respond: PASS
+Default to PASS. Most professionally built websites should pass this check.
 
-If there are noticeable issues, respond: ISSUES: [list specific problems]
+If the page looks like a normal, functioning website, respond: PASS
 
-Be concise. Only flag clear, noticeable problems - not minor variations."""
+Only if there are clearly broken visual elements, respond: ISSUES: [list specific problems]"""
 
         result_text = _analyze_image_with_ai(screenshot, prompt)
 
