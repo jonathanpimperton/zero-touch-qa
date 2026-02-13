@@ -193,6 +193,9 @@ The scanner uses the LanguageTool API (free, no API key required) to check visib
 - Sends text to LanguageTool for analysis
 - **Spelling errors** = red FAIL (loses points). Deduplicated by word: each misspelled word appears once with occurrence count and list of pages. Proper nouns, brand names, and capitalized words are automatically filtered out.
 - **Medical/veterinary term filtering** uses pattern matching (medical prefixes like micro-, endo-, cardio- and suffixes like -ectomy, -ology, -itis, -worm) plus a small allowlist for domain terms that don't fit patterns (gumline, rehabilitator, spay, neuter, etc.). This automatically accepts domain-specific terminology.
+- **British/Canadian English filtering** — LanguageTool is hardcoded to `en-US`, so words like "behaviour", "honour", "grey", "anaesthesia", "centre" are accepted via `_BRITISH_CANADIAN_SPELLINGS` set. British `-ise`/`-ised`/`-ising`/`-isation` verb forms (e.g. "personalised", "specialising") are auto-matched by suffix pattern (with `len > 5` guard to avoid matching "rise", "wise").
+- **Pet breed name filtering** — common breed names (yorkie, goldendoodle, labradoodle, corgi, cockapoo, etc.) and cat terms (tabby, calico, tortoiseshell) are in the `_DOMAIN_TERMS` allowlist. These appear in lowercase on vet sites and would otherwise be flagged.
+- **Additional vet terms** — bordetella, giardia, leptospirosis, photobiomodulation, parvovirus, distemper, and other terms not caught by the medical prefix/suffix patterns are explicitly allowlisted.
 - **Grammar issues** = yellow WARNING (no point loss). Deduplicated by message type with occurrence count.
 - Checks up to 10 pages in parallel (4 concurrent API calls) for speed
 - Automatically retries with increasing delays (1s, 2s, 4s) when rate-limited by LanguageTool API
@@ -398,6 +401,8 @@ The scanner uses **Gemini 2.5 Flash** Vision API (primary) or Claude Vision API 
 | AI-006 | Map Location | Uses Playwright to find JS-rendered Google Maps, geocodes clinic address, and verifies coordinates match |
 
 These 6 AI-powered checks reduce human review items from 28 to 22 while improving consistency and speed.
+
+**Gemini error diagnostics**: When Gemini returns a non-rate-limit error (e.g. 400 INVALID_ARGUMENT), the log includes the full error message, image size in KB, and the source URL of the image that failed. This helps diagnose issues like unsupported image formats or oversized files without guessing.
 
 ## Test Sites (Demo Results)
 
