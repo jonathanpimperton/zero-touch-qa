@@ -4485,7 +4485,8 @@ def _analyze_images_with_ai(images: list[bytes], prompt: str, max_retries: int =
                         _ai_error_count += 1
                         return None
                 else:
-                    print(f"  [AI] Gemini error: {str(e)[:80]}")
+                    img_sizes = [f"{len(img)/1024:.0f}KB" for img in images]
+                    print(f"  [AI] Gemini error (multi-image, sizes={img_sizes}): {e}")
                     _ai_error_count += 1
                     return None
 
@@ -4508,7 +4509,7 @@ def _analyze_images_with_ai(images: list[bytes], prompt: str, max_retries: int =
     return None
 
 
-def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3) -> str:
+def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3, image_url: str = "") -> str:
     """Helper to analyze an image using Gemini (primary) or Anthropic (fallback).
     Includes retry with exponential backoff for rate limit (429) errors
     and adaptive inter-call throttling (fast when allowed, backs off on 429).
@@ -4567,7 +4568,8 @@ def _analyze_image_with_ai(image_bytes: bytes, prompt: str, max_retries: int = 3
                         _ai_error_count += 1
                         return None
                 else:
-                    print(f"  [AI] Gemini error: {str(e)[:80]}")
+                    url_hint = f", url={image_url[-80:]}" if image_url else ""
+                    print(f"  [AI] Gemini error (image size={len(image_bytes)/1024:.0f}KB{url_hint}): {e}")
                     _ai_error_count += 1
                     return None
 
@@ -4661,7 +4663,7 @@ Respond with only: APPROPRIATE or INAPPROPRIATE: [brief reason]"""
                 if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_data, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt, image_url=src)
                 if result_text is None:
                     continue
 
@@ -5001,7 +5003,7 @@ Be lenient - normal exam room backgrounds are fine. Only flag prominent/concerni
                 if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_data, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt, image_url=src)
                 if result_text is None:
                     continue
 
@@ -5103,7 +5105,7 @@ Respond: STOCK (appropriate) or REAL_PET: [brief reason why it appears to be a r
                 if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_data, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt, image_url=src)
                 if result_text is None:
                     continue
 
@@ -5190,7 +5192,7 @@ Be lenient - artistic crops and intentional close-ups are fine. Only flag obviou
                 if not img_data:
                     continue
 
-                result_text = _analyze_image_with_ai(img_data, prompt)
+                result_text = _analyze_image_with_ai(img_data, prompt, image_url=src)
                 if result_text is None:
                     continue
 
