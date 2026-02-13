@@ -2761,6 +2761,31 @@ _MEDICAL_SUFFIXES = (
     "scopic", "gram", "graph", "graphy", "centesis", "lysis",
     "trophy", "genesis", "stasis", "worm",
 )
+# British/Canadian English spellings that en-US LanguageTool flags as errors
+_BRITISH_CANADIAN_SPELLINGS = {
+    # -our / -or
+    "behaviour", "behaviours", "behavioural",
+    "colour", "colours", "coloured", "colourful",
+    "honour", "honoured", "honouring", "honourable",
+    "favour", "favoured", "favourite", "favourites",
+    "neighbour", "neighbours", "neighbourhood",
+    "labour", "laboured", "humour",
+    "tumour", "tumours", "odour", "odours",
+    # -re / -er
+    "centre", "centres", "centred",
+    "litre", "litres", "metre", "metres",
+    "fibre", "fibres",
+    # -ae- / -e-
+    "anaesthesia", "anaesthetic", "anaesthetics",
+    "paediatric", "paediatrics",
+    "orthopaedic", "orthopaedics",
+    "faeces", "faecal",
+    # other
+    "grey", "greys", "licence", "licences",
+    "defence", "offence", "practise", "practised",
+    "catalogue", "programme", "programmes",
+    "skilful",
+}
 # Small allowlist for common domain terms that don't match prefix/suffix patterns
 _DOMAIN_TERMS = {
     "spay", "spayed", "neuter", "neutered", "fecal", "euthanasia",
@@ -2771,6 +2796,24 @@ _DOMAIN_TERMS = {
     "gumline", "gumlines",
     # Wildlife/rehabilitation
     "rehabilitator", "rehabilitators",
+    # Pet breed names (lowercase in body text)
+    "yorkie", "yorkies", "goldendoodle", "goldendoodles",
+    "labradoodle", "labradoodles", "cockapoo", "cockapoos",
+    "pomsky", "pomskies", "maltipoo", "maltipoos",
+    "cavapoo", "cavapoos", "schnoodle", "schnoodles",
+    "puggle", "puggles", "morkie", "morkies",
+    "shiba", "corgi", "corgis", "aussiedoodle",
+    "bernedoodle", "havanese", "basenji",
+    "papillon", "vizsla", "weimaraner",
+    # Cat terms
+    "tabby", "tabbies", "calico", "calicos",
+    "tortoiseshell", "siamese", "ragdoll",
+    # Vet/medical terms not caught by prefix/suffix patterns
+    "bordetella", "giardia", "leptospirosis",
+    "photobiomodulation", "fabellar", "fabella",
+    "parvo", "parvovirus", "distemper",
+    # Common compound words flagged by LanguageTool
+    "skillset", "skillsets",
 }
 
 
@@ -2783,6 +2826,12 @@ def _should_skip_spelling(word: str) -> bool:
     w = word.lower().strip()
     # Known domain terms (small list of words that don't fit patterns)
     if w in _DOMAIN_TERMS:
+        return True
+    # British/Canadian English spellings (valid alternatives to US English)
+    if w in _BRITISH_CANADIAN_SPELLINGS:
+        return True
+    # British -ise/-ised/-ising verb forms (e.g. personalised, specialising)
+    if len(w) > 5 and re.match(r'.+(?:ise|ised|ising|isation)$', w):
         return True
     # Capitalized words (Title Case) are likely names/places/brands
     if word[0].isupper() and len(word) > 1:
