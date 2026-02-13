@@ -1920,6 +1920,58 @@ def admin_clear_history():
         return jsonify({"error": str(e)}), 500
 
 
+def _recalculate_score(report_filename: str) -> int | None:
+    """Recalculate scan score based on results + human review decisions.
+
+    Mirrors the client-side recalcScore() logic:
+    - FAIL: points_lost = weight
+    - WARN: points_lost = weight * 0.5
+    - HUMAN_REVIEW with pass/na: points_lost = 0
+    - HUMAN_REVIEW with fail: points_lost = weight
+    - HUMAN_REVIEW with no decision: points_lost = weight * 0.3
+
+    Returns the new score, or None if recalculation failed.
+    """
+    from db import db_get_report, db_load_human_reviews, db_update_scan_score
+    import json as _json
+
+    try:
+        report_json_str = db_get_report(report_filename, "json")
+        if not report_json_str:
+            return None
+        report_data = _json.loads(report_json_str)
+        results = report_data.get("results", [])
+
+        reviews = db_load_human_reviews(report_filename) or []
+        review_map = {r["item_index"]: r["decision"] for r in reviews}
+
+        total_lost = 0.0
+        human_idx = 0  # Track human review item index separately
+        for item in results:
+            status = item.get("status", "")
+            weight = item.get("weight", 1)
+            if status == "FAIL":
+                total_lost += weight
+            elif status == "WARN":
+                total_lost += weight * 0.5
+            elif status == "HUMAN_REVIEW":
+                decision = review_map.get(human_idx)
+                if decision == "fail":
+                    total_lost += weight
+                elif decision in ("pass", "na"):
+                    total_lost += 0
+                else:
+                    total_lost += weight * 0.3
+                human_idx += 1
+
+        new_score = max(0, round(100 - total_lost))
+        db_update_scan_score(report_filename, new_score)
+        return new_score
+    except Exception as e:
+        print(f"[SCORE] Error recalculating score for {report_filename}: {e}")
+        return None
+
+
 @app.route("/api/review", methods=["POST"])
 def api_save_review():
     """Save a human review decision for a report item.
@@ -1951,10 +2003,13 @@ def api_save_review():
 
     success = db_save_human_review(report_filename, item_index, rule_id, decision, comments)
 
-    if success:
-        return jsonify({"success": True, "message": "Review saved"})
-    else:
+    if not success:
         return jsonify({"success": False, "error": "Failed to save review (database unavailable)"}), 500
+
+    # Recalculate score after saving the review decision
+    new_score = _recalculate_score(report_filename)
+
+    return jsonify({"success": True, "message": "Review saved", "new_score": new_score})
 
 
 @app.route("/api/reviews/<path:report_filename>", methods=["GET"])

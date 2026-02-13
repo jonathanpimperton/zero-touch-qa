@@ -4270,8 +4270,46 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
         headers = {"User-Agent": USER_AGENT}
         resp = requests.get(geocode_url, params=params, headers=headers, timeout=10)
 
-        if resp.status_code == 200 and resp.json():
-            result = resp.json()[0]
+        geo_results = resp.json() if resp.status_code == 200 else []
+
+        # If free-form search failed, try structured geocoding
+        used_zip_fallback = False
+        if not geo_results:
+            structured = re.match(
+                r'(\d+\s+[\w\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Plaza|Plz|Pike|Parkway|Pkwy|Highway|Hwy|Trail|Trl|Place|Pl|Terrace|Ter))\b[.,]?\s*([\w\s]+?),?\s+([A-Z]{2})\s+(\d{5})',
+                page_address, re.IGNORECASE
+            )
+            if structured:
+                structured_params = {
+                    "street": structured.group(1).strip(),
+                    "city": structured.group(2).strip(),
+                    "state": structured.group(3).strip(),
+                    "postalcode": structured.group(4).strip(),
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "us"
+                }
+                resp2 = requests.get(geocode_url, params=structured_params, headers=headers, timeout=10)
+                if resp2.status_code == 200:
+                    geo_results = resp2.json()
+
+        # Last resort: geocode by postal code alone (wider tolerance)
+        if not geo_results:
+            zip_match = re.search(r'\b(\d{5})\b', page_address)
+            if zip_match:
+                zip_params = {
+                    "postalcode": zip_match.group(1),
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "us"
+                }
+                resp3 = requests.get(geocode_url, params=zip_params, headers=headers, timeout=10)
+                if resp3.status_code == 200 and resp3.json():
+                    geo_results = resp3.json()
+                    used_zip_fallback = True
+
+        if geo_results:
+            result = geo_results[0]
             geocoded_lat = float(result["lat"])
             geocoded_lon = float(result["lon"])
 
@@ -4280,8 +4318,10 @@ def check_map_location(pages: dict, rule: dict) -> list[CheckResult]:
             lat_diff = abs(geocoded_lat - map_coords[0])
             lon_diff = abs(geocoded_lon - map_coords[1])
 
-            # Allow ~2km tolerance (0.02 degrees)
-            if lat_diff < 0.02 and lon_diff < 0.02:
+            # Zip-code fallback gives city-center coords: use ~15km tolerance
+            # Street-level geocoding: use ~2km tolerance
+            tolerance = 0.15 if used_zip_fallback else 0.02
+            if lat_diff < tolerance and lon_diff < tolerance:
                 return [CheckResult(
                     rule_id=rule["id"], category=rule["category"],
                     check=rule["check"], status="PASS", weight=rule["weight"],

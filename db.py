@@ -344,6 +344,23 @@ def db_seed_from_filesystem(reports_dir: str):
             print(f"[DB] Could not seed scan_id_map: {e}")
 
 
+def db_update_scan_score(report_filename: str, new_score: int) -> bool:
+    """Update the score for a scan after human review changes."""
+    if not is_db_available():
+        return False
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE scans SET score = %s WHERE report_filename = %s",
+                    (new_score, report_filename)
+                )
+        return True
+    except Exception as e:
+        print(f"[DB] Error updating scan score: {e}")
+        return False
+
+
 def db_save_human_review(report_filename: str, item_index: int, rule_id: str,
                           decision: str, comments: str = "") -> bool:
     """Save a human review decision for a specific item in a report.
