@@ -376,6 +376,34 @@ These checks require the **PetDesk QA Connector** plugin to be installed on each
 2. Recreate `petdesk-qa-plugin.zip`
 3. Create a GitHub release: `gh release create v1.2.0 petdesk-qa-plugin.zip --title "Plugin v1.2.0"`
 
+### Plugin Security Review (TODO — production hardening needed)
+
+**Status:** Reviewed 2026-02-19. The plugin is safe for hackathon use. Replace the default API key before production deployment.
+
+**What's secure:**
+- **Read-only endpoint** — `GET` only, no write/modify/delete capability. An attacker with the key cannot change anything on the site.
+- **Timing-safe auth** — `hash_equals()` on line 197 prevents timing attacks on the API key.
+- **No SQL injection surface** — all data access uses WordPress API functions (`get_plugins()`, `get_option()`, etc.), no raw SQL.
+- **No user input processing** — the endpoint accepts no query parameters or body content. Only input is the `X-PetDesk-QA-Key` header compared against a constant.
+- **Standard WordPress REST API pattern** — uses `register_rest_route` with `permission_callback`.
+- **Direct access guard** — `if (!defined('ABSPATH')) exit;` prevents loading outside WordPress.
+
+**What the endpoint exposes (with valid key):** plugin/theme names and versions, timezone, admin email, form notification emails, media filenames matching template patterns. No user data, passwords, sessions, or patient info.
+
+**Context:** WordPress core already exposes unauthenticated REST endpoints (`/wp-json/wp/v2/posts`, `/wp-json/wp/v2/users`) that leak comparable or more useful information. This plugin is more locked down than default WordPress.
+
+**TODO — replace the hardcoded hackathon API key:**
+- Current key (`petdesk-qa-2026-hackathon-key`) is in the public GitHub repo (line 28 of `petdesk-qa-connector.php`).
+- Replace with a strong random key: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- Update in three places: the plugin PHP file, the scanner env var (`PETDESK_QA_API_KEY`), and rebuild `petdesk-qa-plugin.zip`.
+- **Cannot make the repo private** to hide the key — the plugin's auto-update system (line 103) makes unauthenticated calls to `api.github.com/repos/.../releases/latest`, which returns 404 for private repos. Adding a GitHub token to every WP site defeats the zero-config goal.
+- **Accepted trade-off:** The key is discoverable (public repo + readable on any WP site's filesystem). Security relies on the endpoint being read-only and low-value, not on key secrecy. A strong key still prevents casual exploitation.
+
+**Optional future improvements (not required for launch):**
+- Strip `admin_email` from the response (most sensitive field exposed)
+- Add IP allowlisting to restrict to known scanner IPs
+- Add rate limiting on the endpoint
+
 ## Key Configuration (.env)
 
 - `DATABASE_URL` - PostgreSQL connection string. Set automatically by Render via `render.yaml`. Without it, app falls back to filesystem storage.
